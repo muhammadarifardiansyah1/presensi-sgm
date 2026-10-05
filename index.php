@@ -95,7 +95,7 @@ switch ($route) {
         break;
 
     case 'master/lokasi/hapus':
-        $id = (int) ($_GET['id'] ?? 0);
+        $id = (int) ($_POST['id'] ?? ($_GET['id'] ?? 0));
         (new LokasiController())->hapus($id);
         break;
 

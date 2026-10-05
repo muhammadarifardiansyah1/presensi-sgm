@@ -17,7 +17,7 @@ class LokasiController {
 
     public function index(): void {
         $currentUser = AuthController::checkAdmin();
-        $lokasiList = $this->lokasiModel->getAll();
+        $lokasiList = $this->lokasiModel->getAllWithUsage();
         require_once __DIR__ . '/../Views/master/lokasi_index.php';
     }
 
@@ -80,6 +80,18 @@ class LokasiController {
 
     public function hapus(int $id): void {
         AuthController::checkAdmin();
+
+        if ($id <= 0) {
+            header("Location: " . Config::baseUrl('master/lokasi?err=invalid_id'));
+            exit;
+        }
+
+        $lokasi = $this->lokasiModel->findById($id);
+        if (!$lokasi) {
+            header("Location: " . Config::baseUrl('master/lokasi?err=not_found'));
+            exit;
+        }
+
         $usage = $this->lokasiModel->isUsed($id);
         if ($usage['is_used']) {
             $details = [];
@@ -89,8 +101,12 @@ class LokasiController {
             exit;
         }
 
-        $this->lokasiModel->delete($id);
-        header("Location: " . Config::baseUrl('master/lokasi?msg=deleted'));
+        $deleted = $this->lokasiModel->delete($id);
+        if ($deleted) {
+            header("Location: " . Config::baseUrl('master/lokasi?msg=deleted'));
+        } else {
+            header("Location: " . Config::baseUrl('master/lokasi?err=delete_failed'));
+        }
         exit;
     }
 

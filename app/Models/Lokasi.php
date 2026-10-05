@@ -18,6 +18,30 @@ class Lokasi {
         return $stmt->fetchAll();
     }
 
+    public function getAllWithUsage(): array {
+        $sql = "
+            SELECT 
+                l.*,
+                COALESCE(u.user_count, 0) AS user_count,
+                COALESCE(p.presensi_count, 0) AS presensi_count
+            FROM `lokasi_presensi` l
+            LEFT JOIN (
+                SELECT lokasi_id, COUNT(*) AS user_count 
+                FROM users 
+                WHERE lokasi_id IS NOT NULL 
+                GROUP BY lokasi_id
+            ) u ON l.id = u.lokasi_id
+            LEFT JOIN (
+                SELECT lokasi_id, COUNT(*) AS presensi_count 
+                FROM presensi 
+                WHERE lokasi_id IS NOT NULL 
+                GROUP BY lokasi_id
+            ) p ON l.id = p.lokasi_id
+            ORDER BY l.tipe_lokasi ASC, l.nama_lokasi ASC
+        ";
+        return $this->db->query($sql)->fetchAll();
+    }
+
     public function findById(int $id): ?array {
         $stmt = $this->db->prepare("SELECT * FROM `lokasi_presensi` WHERE `id` = ? LIMIT 1");
         $stmt->execute([$id]);
