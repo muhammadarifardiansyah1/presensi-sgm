@@ -1,6 +1,9 @@
 # ==============================================================================
-# Git Ignore - Presensi & Penggajian PT Surya Gading Mandiri (SGM)
+# Git Ignore - Presensi & Penggajian CV. Surya Gemilang Mojopahit (SGM)
 # ==============================================================================
+
+# Local Migration Blueprint
+docs_migrasi/
 
 # Operating System & IDE Files
 .DS_Store
