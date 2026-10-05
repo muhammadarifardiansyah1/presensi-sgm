@@ -1,4 +1,4 @@
-# Sistem Presensi & Penggajian Karyawan - PT Surya Gading Mandiri (SGM)
+# Sistem Presensi & Penggajian Karyawan - CV. Surya Gemilang Mojopahit (SGM)
 
 Aplikasi web presensi karyawan berbasis **Geolokasi GPS**, **Verifikasi Wajah / Kamera Pintar**, dan **Sistem Penggajian (Payroll)** yang dibangun dengan arsitektur **Native PHP Modern Pure MVC (Model-View-Controller)** berkinerja tinggi (*zero external framework bloat*).
 
@@ -149,4 +149,4 @@ absensi_sgm/
 ---
 
 ## 📄 Lisensi
-Hak Cipta © 2026 PT Surya Gading Mandiri (SGM). Seluruh hak cipta dilindungi undang-undang.
+Hak Cipta © 2026 CV. Surya Gemilang Mojopahit (SGM). Seluruh hak cipta dilindungi undang-undang.

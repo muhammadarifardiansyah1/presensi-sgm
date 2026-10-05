@@ -1,5 +1,5 @@
 # Dokumen Analisis Performa & Skalabilitas Tahap Produksi
-**Aplikasi:** Presensi & Penggajian Karyawan - PT Surya Gading Mandiri (SGM)  
+**Aplikasi:** Presensi & Penggajian Karyawan - CV. Surya Gemilang Mojopahit (SGM)  
 **Versi Sistem:** 1.0.0  
 **Tanggal Analisis:** Oktober 2026  
 **Status Dokumen:** Rekomendasi Teknis Kesiapan Produksi (*Production Readiness Audit*)

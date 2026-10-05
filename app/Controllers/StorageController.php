@@ -1,7 +1,7 @@
 <?php
 /**
  * Storage Controller
- * Absensi Surya Gading Mandiri (SGM)
+ * Absensi Surya Gemilang Mojopahit (SGM)
  *
  * Mengelola antarmuka pemantauan kuota penyimpanan foto presensi
  * dan eksekusi retensi berkas untuk Super Admin.

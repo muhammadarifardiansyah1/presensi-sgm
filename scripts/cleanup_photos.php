@@ -1,7 +1,7 @@
 <?php
 /**
  * CLI & Cron Script: Pembersihan Berkas Foto Presensi Lampau (Data Retention)
- * Absensi Surya Gading Mandiri (SGM)
+ * Absensi Surya Gemilang Mojopahit (SGM)
  *
  * Penggunaan:
  *   php scripts/cleanup_photos.php [--days=180] [--dry-run] [--force]

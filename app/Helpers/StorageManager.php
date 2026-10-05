@@ -1,7 +1,7 @@
 <?php
 /**
  * Storage Manager Helper
- * Absensi Surya Gading Mandiri (SGM)
+ * Absensi Surya Gemilang Mojopahit (SGM)
  *
  * Mengelola pemantauan kapasitas penyimpanan foto presensi,
  * kalkulasi statistik disk, dan eksekusi retensi berkas lama secara aman.

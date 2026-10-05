@@ -1,7 +1,7 @@
 <?php
 /**
  * Modern Monochrome Outline SVG Icons Helper
- * Absensi Surya Gading Mandiri (SGM)
+ * Absensi Surya Gemilang Mojopahit (SGM)
  */
 
 class Icon {

@@ -36,7 +36,7 @@
 
 <table>
     <tr>
-        <td colspan="11" class="title-header">REKAP PRESENSI BULANAN - SURYA GADING MANDIRI</td>
+        <td colspan="11" class="title-header">REKAP PRESENSI BULANAN - CV. SURYA GEMILANG MOJOPAHIT</td>
     </tr>
     <tr>
         <td colspan="11"><strong>Bulan:</strong> <?= $bulan ?> (<?= $bulanText ?>)</td>

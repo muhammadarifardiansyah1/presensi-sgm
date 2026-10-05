@@ -1,7 +1,7 @@
 <?php
 /**
  * Front Controller & Main Router
- * Absensi Surya Gading Mandiri (SGM)
+ * Absensi Surya Gemilang Mojopahit (SGM)
  */
 
 require_once __DIR__ . '/app/Config/Config.php';

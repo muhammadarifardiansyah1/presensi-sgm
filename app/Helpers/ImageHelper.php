@@ -1,7 +1,7 @@
 <?php
 /**
  * Image Processing & Optimization Helper
- * Absensi Surya Gading Mandiri (SGM)
+ * Absensi Surya Gemilang Mojopahit (SGM)
  *
  * Mengoptimalkan kompresi dan dimensi foto agar ringan, hemat bandwidth,
  * dan menghemat kuota disk penyimpanan hosting.

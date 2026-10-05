@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Rekap Presensi Harian - Surya Gading Mandiri</title>
+    <title>Rekap Presensi Harian - CV. Surya Gemilang Mojopahit</title>
     <style>
         table {
             border-collapse: collapse;
@@ -29,7 +29,7 @@
 
 <table>
     <tr>
-        <td colspan="9" class="title-header">REKAP PRESENSI HARIAN - SURYA GADING MANDIRI</td>
+        <td colspan="9" class="title-header">REKAP PRESENSI HARIAN - CV. SURYA GEMILANG MOJOPAHIT</td>
     </tr>
     <tr>
         <td colspan="9"><strong>Periode:</strong> <?= $tanggalMulai ?><?= ($tanggalMulai !== $tanggalSelesai) ? ' s/d ' . $tanggalSelesai : '' ?></td>

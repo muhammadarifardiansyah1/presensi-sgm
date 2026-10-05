@@ -1,7 +1,7 @@
 <?php
 /**
  * Single Employee Payslip View (Pratinjau & Cetak Slip Gaji Pegawai)
- * Absensi Surya Gading Mandiri (SGM)
+ * Absensi Surya Gemilang Mojopahit (SGM)
  */
 
 function formatRupiahSingle(float $angka): string {
@@ -406,7 +406,7 @@ $subtotalPotongan   = $p['potongan_alpa'];
                     <div>Diserahkan Oleh,</div>
                     <div class="space"></div>
                     <div class="name">HRD / Finance</div>
-                    <div class="role">PT. Surya Gading Mandiri</div>
+                    <div class="role">CV. Surya Gemilang Mojopahit</div>
                 </div>
             </div>
         </div>

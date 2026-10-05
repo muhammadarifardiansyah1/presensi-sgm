@@ -1,7 +1,7 @@
 <?php
 /**
  * Bulk Employee Payslip View (Download / Cetak Seluruh Slip Gaji 1 Bulan)
- * Absensi Surya Gading Mandiri (SGM)
+ * Absensi Surya Gemilang Mojopahit (SGM)
  */
 
 function formatRupiahSlip(float $angka): string {
@@ -512,7 +512,7 @@ function terbilangRupiah(float $nilai): string {
                             <div>Diserahkan Oleh,</div>
                             <div class="space"></div>
                             <div class="name">HRD / Finance</div>
-                            <div class="role">PT. Surya Gading Mandiri</div>
+                            <div class="role">CV. Surya Gemilang Mojopahit</div>
                         </div>
                     </div>
                 </div>

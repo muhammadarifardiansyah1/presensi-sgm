@@ -1,7 +1,7 @@
 <?php
 /**
  * Dashboard Controller
- * Absensi Surya Gading Mandiri (SGM)
+ * Absensi Surya Gemilang Mojopahit (SGM)
  */
 
 require_once __DIR__ . '/../Config/Config.php';

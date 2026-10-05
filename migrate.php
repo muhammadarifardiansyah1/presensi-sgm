@@ -1,6 +1,6 @@
 <?php
 /**
- * Database Migration & Seeder Script for Absensi Surya Gading Mandiri (SGM)
+ * Database Migration & Seeder Script for Absensi Surya Gemilang Mojopahit (SGM)
  */
 
 $host = '127.0.0.1';
@@ -182,7 +182,7 @@ try {
     if ($stmt->fetchColumn() == 0) {
         $pdo->exec("
             INSERT INTO `lokasi_presensi` (`nama_lokasi`, `alamat_lokasi`, `tipe_lokasi`, `latitude`, `longitude`, `radius`, `zona_waktu`, `jam_masuk`, `jam_pulang`) VALUES
-            ('Kantor Pusat Surya Gading Mandiri', 'Jl. Jenderal Sudirman No. 45, Jakarta Pusat', 'Pusat', -6.20876340, 106.84559900, 500, 'WIB', '08:00:00', '17:00:00'),
+            ('Kantor Pusat Surya Gemilang Mojopahit', 'Jl. Jenderal Sudirman No. 45, Jakarta Pusat', 'Pusat', -6.20876340, 106.84559900, 500, 'WIB', '08:00:00', '17:00:00'),
             ('Kantor Cabang Palembang', 'Jl. R. Soekamto No. 12, Palembang', 'Cabang', -2.97607350, 104.75783300, 1000, 'WIB', '08:00:00', '17:00:00'),
             ('Kantor Utama Demo SGM', 'Konoha Barat Daya', 'Pusat', -4.01771108, 103.23932119, 20000, 'WIB', '08:00:00', '17:00:00')
         ");

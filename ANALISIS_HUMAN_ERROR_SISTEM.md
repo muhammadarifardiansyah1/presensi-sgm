@@ -1,5 +1,5 @@
 # Dokumen Analisis Human Error & Manajemen Risiko Sistem
-**Aplikasi:** Presensi & Penggajian Karyawan - PT Surya Gading Mandiri (SGM)  
+**Aplikasi:** Presensi & Penggajian Karyawan - CV. Surya Gemilang Mojopahit (SGM)  
 **Versi Sistem:** 1.0.0  
 **Tanggal Dokumen:** Oktober 2026  
 **Klasifikasi:** Audit Ketahanan Sistem & Panduan Mitigasi Operasional (*Operational Risk Assessment*)
@@ -8,7 +8,7 @@
 
 ## 📌 Ringkasan Eksekutif
 
-Aplikasi Presensi & Penggajian PT Surya Gading Mandiri telah dioptimasi dari sisi arsitektur kode (*native MVC PHP*), optimasi query agregasi database, pengerasan koneksi jaringan, hingga kompresi dan *browser caching*. 
+Aplikasi Presensi & Penggajian CV. Surya Gemilang Mojopahit telah dioptimasi dari sisi arsitektur kode (*native MVC PHP*), optimasi query agregasi database, pengerasan koneksi jaringan, hingga kompresi dan *browser caching*. 
 
 Namun, dalam operasional tahap produksi (*live hosting*), sistem tidak hanya berhadapan dengan beban komputasi server, melainkan juga dengan **kesalahan manusia (*Human Error*)** yang dilakukan oleh para aktor sistem:
 1. **Operator / Admin / HRD** (Pengguna dengan hak akses kelola data tertinggi).
@@ -254,4 +254,4 @@ Dokumen ini memetakan seluruh titik rawan *human error* tersebut secara komprehe
 
 ---
 
-*Dokumen ini menjadi acuan panduan operasional (*SOP*) tim IT, HRD, dan DevOps PT Surya Gading Mandiri dalam memelihara keandalan sistem jangka panjang.*
+*Dokumen ini menjadi acuan panduan operasional (*SOP*) tim IT, HRD, dan DevOps CV. Surya Gemilang Mojopahit dalam memelihara keandalan sistem jangka panjang.*

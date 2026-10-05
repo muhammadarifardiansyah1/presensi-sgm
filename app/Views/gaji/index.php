@@ -523,7 +523,7 @@ $periodeText = ($namaBulan[$bulan] ?? $bulan) . ' ' . $tahun;
       var totalCols = headers.length;
 
       sheet.getRange(1, 1, 1, totalCols).merge();
-      sheet.getRange(1, 1).setValue("REKAP PRESENSI KARYAWAN - PT SURYA GADING MANDIRI")
+      sheet.getRange(1, 1).setValue("REKAP PRESENSI KARYAWAN - CV SURYA GEMILANG MOJOPAHIT")
            .setBackground("#1E3A8A").setFontColor("#FFFFFF").setFontWeight("bold").setFontSize(12)
            .setHorizontalAlignment("center").setVerticalAlignment("middle");
       sheet.setRowHeight(1, 36);
@@ -619,7 +619,7 @@ $periodeText = ($namaBulan[$bulan] ?? $bulan) . ' ' . $tahun;
     var totalCols = headers.length;
 
     sheet.getRange(1, 1, 1, totalCols).merge();
-    sheet.getRange(1, 1).setValue("REKAP PENGGAJIAN KARYAWAN - PT SURYA GADING MANDIRI")
+    sheet.getRange(1, 1).setValue("REKAP PENGGAJIAN KARYAWAN - CV SURYA GEMILANG MOJOPAHIT")
          .setBackground("#065F46").setFontColor("#FFFFFF").setFontWeight("bold").setFontSize(12)
          .setHorizontalAlignment("center").setVerticalAlignment("middle");
     sheet.setRowHeight(1, 36);

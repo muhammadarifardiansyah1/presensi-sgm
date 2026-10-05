@@ -1,7 +1,7 @@
 <?php
 /**
  * Lightweight Spreadsheet Helper (CSV & XLSX)
- * Absensi Surya Gading Mandiri (SGM)
+ * Absensi Surya Gemilang Mojopahit (SGM)
  *
  * Implements native PHP parsing without bloated 3rd-party dependencies.
  * Handles auto-detection of delimiters, UTF-8 BOM, and basic .xlsx XML streams.
@@ -513,7 +513,7 @@ class SpreadsheetHelper {
         $output = "\xEF\xBB\xBF"; // UTF-8 BOM
         $fp = fopen('php://temp', 'r+');
 
-        fputcsv($fp, ['REKAP PENGGAJIAN & PRESENSI KARYAWAN PT SURYA GADING MANDIRI'], ',', '"', "\\");
+        fputcsv($fp, ['REKAP PENGGAJIAN & PRESENSI KARYAWAN CV SURYA GEMILANG MOJOPAHIT'], ',', '"', "\\");
         if ($periode) {
             fputcsv($fp, ['Periode: ' . $periode], ',', '"', "\\");
         }

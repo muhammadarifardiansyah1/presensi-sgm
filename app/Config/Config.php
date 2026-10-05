@@ -1,7 +1,7 @@
 <?php
 /**
  * Application Global Configuration
- * Absensi Surya Gading Mandiri (SGM)
+ * Absensi Surya Gemilang Mojopahit (SGM)
  */
 
 date_default_timezone_set('Asia/Jakarta');
@@ -27,8 +27,8 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 class Config {
-    const APP_NAME = 'Surya Gading Mandiri';
-    const APP_TITLE = 'Absensi Surya Gading Mandiri';
+    const APP_NAME = 'Surya Gemilang Mojopahit';
+    const APP_TITLE = 'Absensi Surya Gemilang Mojopahit';
     const APP_TAGLINE = 'Absen Foto & Lokasi GPS';
     const VERSION = '1.0.0';
 

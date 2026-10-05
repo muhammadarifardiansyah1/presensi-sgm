@@ -1,6 +1,6 @@
 /**
  * Application JavaScript Core
- * Absensi Surya Gading Mandiri (SGM)
+ * Absensi Surya Gemilang Mojopahit (SGM)
  */
 
 document.addEventListener('DOMContentLoaded', () => {
