@@ -1,0 +1,84 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Blokir akses langsung ke folder internal /app
+    RewriteRule ^app/ - [F,L]
+
+    # Jangan rewrite jika file atau direktori fisik ada
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+
+    # Rewrite seluruh rute ke index.php (kompatibel subfolder maupun root domain)
+    RewriteRule ^(.*)$ index.php?url=$1 [QSA,L]
+</IfModule>
+
+# Keamanan: Blokir akses ke file konfigurasi dan berkas sensitif
+<FilesMatch "(?i)\.(ini|log|env|sql|json|lock|git)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order Deny,Allow
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# ==============================================================================
+# 1. Kompresi Aset Statis Berbasis Teks (Gzip / Deflate Compression)
+#    Memangkas payload transmisi CSS, JS, SVG, JSON hingga 70-80%
+# ==============================================================================
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/plain
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/xml
+    AddOutputFilterByType DEFLATE text/css
+    AddOutputFilterByType DEFLATE text/javascript
+    AddOutputFilterByType DEFLATE application/xml
+    AddOutputFilterByType DEFLATE application/xhtml+xml
+    AddOutputFilterByType DEFLATE application/rss+xml
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE application/x-javascript
+    AddOutputFilterByType DEFLATE application/json
+    AddOutputFilterByType DEFLATE image/svg+xml
+</IfModule>
+
+# ==============================================================================
+# 2. Browser Caching (Expires Headers)
+#    Menginstruksikan browser menyimpan cache aset statis agar navigasi instan
+# ==============================================================================
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresDefault "access plus 1 day"
+
+    # Font Web (1 Tahun)
+    ExpiresByType font/woff2 "access plus 1 year"
+    ExpiresByType font/woff "access plus 1 year"
+    ExpiresByType font/ttf "access plus 1 year"
+    ExpiresByType font/otf "access plus 1 year"
+
+    # Stylesheets & Javascript (1 Bulan - terlindungi oleh auto cache-busting ?v=...)
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    ExpiresByType text/javascript "access plus 1 month"
+
+    # Gambar, Foto Presensi, dan Ikon (1 Bulan)
+    ExpiresByType image/jpeg "access plus 1 month"
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType image/webp "access plus 1 month"
+    ExpiresByType image/svg+xml "access plus 1 month"
+    ExpiresByType image/x-icon "access plus 1 year"
+</IfModule>
+
+# ==============================================================================
+# 3. HTTP Header Cache-Control & Keamanan Aset
+# ==============================================================================
+<IfModule mod_headers.c>
+    # Aset Statis: Cache Publik dengan stale-while-revalidate
+    <FilesMatch "\.(css|js|woff2|woff|ttf|svg|png|jpg|jpeg|webp|gif|ico)$">
+        Header set Cache-Control "public, max-age=2592000, stale-while-revalidate=86400"
+    </FilesMatch>
+
+    # Proteksi MIME-Sniffing untuk aset
+    Header set X-Content-Type-Options "nosniff"
+</IfModule>
+
