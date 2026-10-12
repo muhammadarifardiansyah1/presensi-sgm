@@ -89,12 +89,13 @@ class NotificationHelper {
 
             // 3. Surat Perintah Lembur (SPL) Aktif Terbaru (Admin)
             $stmtLemburAdmin = $db->query("
-                SELECT pl.*, l.nama_lokasi, COUNT(plp.id) AS total_pegawai
+                SELECT pl.id, pl.nomor_sp_lembur, pl.lokasi_id, pl.tanggal, pl.jam_mulai, pl.jam_selesai,
+                       pl.maksimal_jam, pl.keterangan, pl.status, pl.created_by, pl.created_at, pl.updated_at,
+                       l.nama_lokasi,
+                       (SELECT COUNT(*) FROM `penugasan_lembur_pegawai` plp WHERE plp.penugasan_lembur_id = pl.id) AS total_pegawai
                 FROM `penugasan_lembur` pl
                 LEFT JOIN `lokasi_presensi` l ON pl.lokasi_id = l.id
-                LEFT JOIN `penugasan_lembur_pegawai` plp ON pl.id = plp.penugasan_lembur_id
                 WHERE pl.status = 'aktif' AND pl.tanggal >= CURDATE()
-                GROUP BY pl.id, l.nama_lokasi
                 ORDER BY pl.tanggal ASC, pl.jam_mulai ASC
                 LIMIT 3
             ");
@@ -205,7 +206,9 @@ class NotificationHelper {
 
             // 3. Notifikasi Surat Perintah Lembur (SPL) untuk Pegawai
             $stmtLembur = $db->prepare("
-                SELECT pl.*, l.nama_lokasi, plp.status AS plp_status, plp.jam_lembur_aktual
+                SELECT pl.id, pl.nomor_sp_lembur, pl.lokasi_id, pl.tanggal, pl.jam_mulai, pl.jam_selesai,
+                       pl.maksimal_jam, pl.keterangan, pl.status, pl.created_by, pl.created_at, pl.updated_at,
+                       l.nama_lokasi, plp.status AS plp_status, plp.jam_lembur_aktual
                 FROM `penugasan_lembur_pegawai` plp
                 JOIN `penugasan_lembur` pl ON plp.penugasan_lembur_id = pl.id
                 LEFT JOIN `lokasi_presensi` l ON pl.lokasi_id = l.id
@@ -336,11 +339,12 @@ class NotificationHelper {
 
             // 3. Seluruh Surat Perintah Lembur (Admin)
             $stmtLemburAll = $db->query("
-                SELECT pl.*, l.nama_lokasi, COUNT(plp.id) AS total_pegawai
+                SELECT pl.id, pl.nomor_sp_lembur, pl.lokasi_id, pl.tanggal, pl.jam_mulai, pl.jam_selesai,
+                       pl.maksimal_jam, pl.keterangan, pl.status, pl.created_by, pl.created_at, pl.updated_at,
+                       l.nama_lokasi,
+                       (SELECT COUNT(*) FROM `penugasan_lembur_pegawai` plp WHERE plp.penugasan_lembur_id = pl.id) AS total_pegawai
                 FROM `penugasan_lembur` pl
                 LEFT JOIN `lokasi_presensi` l ON pl.lokasi_id = l.id
-                LEFT JOIN `penugasan_lembur_pegawai` plp ON pl.id = plp.penugasan_lembur_id
-                GROUP BY pl.id, l.nama_lokasi
                 ORDER BY pl.tanggal DESC, pl.jam_mulai DESC
                 LIMIT 20
             ");
@@ -468,7 +472,9 @@ class NotificationHelper {
 
             // 3. Seluruh Riwayat Penugasan Lembur Pegawai
             $stmtLemburAllPeg = $db->prepare("
-                SELECT pl.*, l.nama_lokasi, plp.status AS plp_status, plp.jam_lembur_aktual
+                SELECT pl.id, pl.nomor_sp_lembur, pl.lokasi_id, pl.tanggal, pl.jam_mulai, pl.jam_selesai,
+                       pl.maksimal_jam, pl.keterangan, pl.status, pl.created_by, pl.created_at, pl.updated_at,
+                       l.nama_lokasi, plp.status AS plp_status, plp.jam_lembur_aktual
                 FROM `penugasan_lembur_pegawai` plp
                 JOIN `penugasan_lembur` pl ON plp.penugasan_lembur_id = pl.id
                 LEFT JOIN `lokasi_presensi` l ON pl.lokasi_id = l.id
@@ -607,14 +613,13 @@ class NotificationHelper {
         // 3. Surat Perintah Lembur (SPL) Aktif
         try {
             $stmtLembur = $db->query("
-                SELECT pl.*,
+                SELECT pl.id, pl.nomor_sp_lembur, pl.lokasi_id, pl.tanggal, pl.jam_mulai, pl.jam_selesai,
+                       pl.maksimal_jam, pl.keterangan, pl.status, pl.created_by, pl.created_at, pl.updated_at,
                        l.nama_lokasi,
-                       COUNT(plp.id) AS total_pegawai
+                       (SELECT COUNT(*) FROM `penugasan_lembur_pegawai` plp WHERE plp.penugasan_lembur_id = pl.id) AS total_pegawai
                 FROM `penugasan_lembur` pl
                 LEFT JOIN `lokasi_presensi` l ON pl.lokasi_id = l.id
-                LEFT JOIN `penugasan_lembur_pegawai` plp ON pl.id = plp.penugasan_lembur_id
                 WHERE pl.status = 'aktif'
-                GROUP BY pl.id, l.nama_lokasi
                 ORDER BY pl.tanggal DESC, pl.created_at DESC
                 LIMIT 4
             ");

@@ -33,7 +33,8 @@ class PenugasanLembur {
     public function getAllPenugasan(?int $bulan = null, ?int $tahun = null, ?int $lokasiId = null, ?string $status = null): array {
         $sql = "
             SELECT 
-                pl.*,
+                pl.id, pl.nomor_sp_lembur, pl.lokasi_id, pl.tanggal, pl.jam_mulai, pl.jam_selesai,
+                pl.maksimal_jam, pl.keterangan, pl.status, pl.created_by, pl.created_at, pl.updated_at,
                 l.nama_lokasi,
                 l.jam_pulang AS jam_pulang_standar,
                 u_creator.nama AS nama_creator,
@@ -67,7 +68,7 @@ class PenugasanLembur {
             $params[] = $status;
         }
 
-        $sql .= " GROUP BY pl.id, l.nama_lokasi, l.jam_pulang, u_creator.nama ORDER BY pl.tanggal DESC, pl.jam_mulai DESC, pl.id DESC";
+        $sql .= " GROUP BY pl.id, pl.nomor_sp_lembur, pl.lokasi_id, pl.tanggal, pl.jam_mulai, pl.jam_selesai, pl.maksimal_jam, pl.keterangan, pl.status, pl.created_by, pl.created_at, pl.updated_at, l.nama_lokasi, l.jam_pulang, u_creator.nama ORDER BY pl.tanggal DESC, pl.jam_mulai DESC, pl.id DESC";
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);

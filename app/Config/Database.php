@@ -47,6 +47,9 @@ class Database {
 
             try {
                 self::$instance = new PDO($dsn, Config::getDbUser(), Config::getDbPass(), $options);
+                // Safety net: Cloud MySQL sering meng-override INIT_COMMAND, jadi set ulang secara eksplisit
+                self::$instance->exec("SET SESSION sql_mode = 'NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'");
+                self::$instance->exec("SET SESSION time_zone = '+07:00'");
             } catch (PDOException $e) {
                 die("Koneksi Database Gagal: " . htmlspecialchars($e->getMessage()));
             }

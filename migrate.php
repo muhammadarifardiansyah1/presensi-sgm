@@ -3,7 +3,7 @@
  * Database Migration & Seeder Script for Absensi Surya Gemilang Mojopahit (SGM)
  */
 
-if (php_sapi_name() !== 'cli') {
+if (php_sapi_name() !== 'cli' && !defined('ALLOW_WEB_MIGRATION')) {
     http_response_code(403);
     header('Content-Type: text/plain; charset=utf-8');
     exit("Akses Ditolak: Skrip migrasi database hanya dapat dijalankan melalui Terminal (CLI).\n");
