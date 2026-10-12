@@ -8,8 +8,16 @@ date_default_timezone_set('Asia/Jakarta');
 
 // Start session with secure parameters & active garbage collection (mencegah penumpukan file session di hosting)
 if (session_status() === PHP_SESSION_NONE) {
-    // Pada environment Serverless (seperti Vercel / AWS Lambda), hanya folder /tmp yang dapat ditulis
-    if (getenv('VERCEL') || !empty($_SERVER['VERCEL']) || getenv('AWS_LAMBDA_FUNCTION_NAME')) {
+    $isVercel = (getenv('VERCEL') || !empty($_SERVER['VERCEL']) || getenv('VERCEL_ENV'));
+
+    // Pada environment Serverless (Vercel), gunakan Database Session Handler agar session persistent
+    if ($isVercel) {
+        require_once __DIR__ . '/DatabaseSessionHandler.php';
+        require_once __DIR__ . '/Database.php';
+        DatabaseSessionHandler::ensureTable();
+        $handler = new DatabaseSessionHandler();
+        session_set_save_handler($handler, true);
+    } elseif (getenv('AWS_LAMBDA_FUNCTION_NAME')) {
         if (is_dir('/tmp') && is_writable('/tmp')) {
             @session_save_path('/tmp');
         }

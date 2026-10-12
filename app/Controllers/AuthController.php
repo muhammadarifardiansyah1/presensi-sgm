@@ -47,20 +47,45 @@ class AuthController {
         $_SESSION['last_activity'] = $now;
 
         // 2. Sinkronisasi Data Pengguna & Validasi Status
+        // Di Vercel serverless: hanya refresh data user setiap 5 menit untuk mengurangi query
+        $needsRefresh = true;
+        $refreshInterval = 300; // 5 menit
+        if (!empty($_SESSION['user_data_cached_at']) && ($now - $_SESSION['user_data_cached_at']) < $refreshInterval) {
+            $needsRefresh = false;
+        }
+
         $userModel = new User();
-        $freshUser = $userModel->findById((int) $_SESSION['user_id']);
-        if (!$freshUser || $freshUser['status'] !== 'aktif') {
-            self::forceLogout('Akun Anda dinonaktifkan atau tidak ditemukan. Silakan hubungi Administrator.');
+        if ($needsRefresh) {
+            $freshUser = $userModel->findById((int) $_SESSION['user_id']);
+            if (!$freshUser || $freshUser['status'] !== 'aktif') {
+                self::forceLogout('Akun Anda dinonaktifkan atau tidak ditemukan. Silakan hubungi Administrator.');
+            }
+            $_SESSION['user_data_cached_at'] = $now;
+            $_SESSION['cached_user'] = $freshUser;
+        } else {
+            $freshUser = $_SESSION['cached_user'] ?? null;
+            if (!$freshUser) {
+                $freshUser = $userModel->findById((int) $_SESSION['user_id']);
+                if (!$freshUser || $freshUser['status'] !== 'aktif') {
+                    self::forceLogout('Akun Anda dinonaktifkan atau tidak ditemukan. Silakan hubungi Administrator.');
+                }
+                $_SESSION['cached_user'] = $freshUser;
+                $_SESSION['user_data_cached_at'] = $now;
+            }
         }
 
         // 3. Proteksi Single Active Device Login (1 Akun = 1 Perangkat Aktif)
-        $currentSessionId = session_id();
-        if (empty($freshUser['session_id'])) {
-            // Adopsi session saat ini untuk akun yang sedang aktif
-            $userModel->updateSession((int)$freshUser['id'], $currentSessionId);
-        } elseif ($freshUser['session_id'] !== $currentSessionId) {
-            // Akun telah login di perangkat/browser lain
-            self::forceLogout('Akun Anda telah masuk di perangkat lain. Sesi pada perangkat ini telah diakhiri demi keamanan.');
+        // Dinonaktifkan di Vercel Serverless karena session_id bisa berubah antar container
+        $isVercel = (getenv('VERCEL') || !empty($_SERVER['VERCEL']) || getenv('VERCEL_ENV'));
+        if (!$isVercel) {
+            $currentSessionId = session_id();
+            if (empty($freshUser['session_id'])) {
+                // Adopsi session saat ini untuk akun yang sedang aktif
+                $userModel->updateSession((int)$freshUser['id'], $currentSessionId);
+            } elseif ($freshUser['session_id'] !== $currentSessionId) {
+                // Akun telah login di perangkat/browser lain
+                self::forceLogout('Akun Anda telah masuk di perangkat lain. Sesi pada perangkat ini telah diakhiri demi keamanan.');
+            }
         }
 
         // Perbarui info sesi dengan data terbaru dari database
