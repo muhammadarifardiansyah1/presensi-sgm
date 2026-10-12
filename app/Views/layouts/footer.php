@@ -9,11 +9,24 @@
     </div>
 </footer>
 
-<!-- Leaflet JS (Local Asset) -->
-<script src="<?= Config::baseUrl('assets/vendor/leaflet/leaflet.js') ?>"></script>
+<!-- Modal Konfirmasi Global (In-App Dialog) -->
+<div id="globalConfirmModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="globalConfirmTitle">
+    <div class="modal-card modal-confirm" style="max-width: 440px !important;">
+        <div id="globalConfirmIcon" class="modal-icon-danger">
+            <!-- Dynamic icon inserted by JS -->
+        </div>
+        <h3 id="globalConfirmTitle" class="modal-title">Konfirmasi Tindakan</h3>
+        <p id="globalConfirmDesc" class="modal-desc">Apakah Anda yakin ingin melanjutkan tindakan ini?</p>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" id="globalConfirmBtnCancel">Batal</button>
+            <button type="button" class="btn btn-danger" id="globalConfirmBtnOk">Lanjutkan</button>
+        </div>
+    </div>
+</div>
 
-<!-- Main App Scripts -->
-<script src="<?= Config::baseUrl('assets/js/app.js') ?>?v=<?= filemtime(__DIR__ . '/../../../assets/js/app.js') ?>"></script>
+<!-- Global Floating Toast Container -->
+<div id="sgmToastContainer" class="sgm-toast-container" aria-live="polite"></div>
 
 </body>
 </html>
+

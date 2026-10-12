@@ -6,7 +6,7 @@ require_once __DIR__ . '/../layouts/header.php';
 
 <div style="margin-bottom: 12px; display:flex; justify-content:space-between; align-items:center;">
     <h2 style="font-size: 1.4rem; font-weight: 700;">Presensi Masuk</h2>
-    <a href="<?= Config::baseUrl('dashboard') ?>" class="btn btn-secondary btn-sm">← Kembali</a>
+    <a href="<?= Config::baseUrl('dashboard') ?>" class="btn btn-secondary btn-sm" id="btn-kembali-presensi">← Kembali</a>
 </div>
 
 <div id="alert-box" style="display:none;" class="alert"></div>
@@ -69,8 +69,70 @@ require_once __DIR__ . '/../layouts/header.php';
     </div>
 </div>
 
+<!-- Modal Konfirmasi Presensi Masuk (Review Foto & Lokasi) -->
+<div id="modalKonfirmasiMasuk" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalKonfirmasiMasukTitle">
+    <div class="modal-card presensi-modal-card">
+        <div class="modal-header" style="background: var(--bg-subtle); padding: 16px 20px; border-bottom: 1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="width:36px; height:36px; border-radius:var(--radius-sm); background:var(--primary-light); color:var(--primary); display:flex; align-items:center; justify-content:center;">
+                    <?= Icon::get('camera', 18) ?>
+                </div>
+                <div>
+                    <h3 id="modalKonfirmasiMasukTitle" style="font-size:1.1rem; font-weight:700; color:var(--text-main); margin:0;">Konfirmasi Presensi Masuk</h3>
+                    <span style="font-size:0.75rem; color:var(--text-muted);">Periksa foto dan lokasi Anda sebelum mengirim</span>
+                </div>
+            </div>
+            <button type="button" class="modal-close-btn" id="btn-batal-modal-x" aria-label="Tutup Modal" style="background:none; border:none; color:var(--text-muted); cursor:pointer;">
+                <?= Icon::get('x', 18) ?>
+            </button>
+        </div>
+
+        <div class="modal-body" style="padding: 18px 20px;">
+            <!-- Preview Foto Hasil Jepretan -->
+            <div class="snapshot-preview-box">
+                <img id="preview-snapshot-img" class="snapshot-preview-img" src="" alt="Preview Selfie">
+                <div class="snapshot-timestamp-pill" id="modal-time-stamp">
+                    --:--:--
+                </div>
+            </div>
+
+            <!-- Ringkasan Info Presensi -->
+            <div class="presensi-summary-box">
+                <div class="presensi-summary-row">
+                    <span style="color:var(--text-muted);">Pegawai:</span>
+                    <strong style="color:var(--text-main);"><?= htmlspecialchars($currentUser['nama'] ?? 'Pegawai') ?></strong>
+                </div>
+                <div class="presensi-summary-row">
+                    <span style="color:var(--text-muted);">Titik Kantor:</span>
+                    <strong id="modal-lokasi-name" style="color:var(--text-main);">-</strong>
+                </div>
+                <div class="presensi-summary-row">
+                    <span style="color:var(--text-muted);">Jarak dari Kantor:</span>
+                    <span id="modal-distance-text" class="badge badge-success" style="font-size:0.75rem; padding: 2px 8px;">
+                        - meter (Dalam Radius)
+                    </span>
+                </div>
+            </div>
+
+            <p style="font-size:0.78rem; color:var(--text-muted); margin: 12px 0 0 0; text-align: center; line-height: 1.4;">
+                💡 <em>Pastikan wajah terlihat jelas dan tegak menghadap kamera sebelum mengirim presensi.</em>
+            </p>
+        </div>
+
+        <div class="modal-footer" style="padding: 14px 20px; background: var(--bg-subtle); border-top: 1px solid var(--border-color); display:flex; gap:10px; justify-content:flex-end;">
+            <button type="button" class="btn btn-secondary" id="btn-retake-foto" style="display:inline-flex; align-items:center; gap:6px;">
+                <?= Icon::get('refresh', 14) ?> <span>Ambil Ulang Foto</span>
+            </button>
+            <button type="button" class="btn btn-primary" id="btn-confirm-send-masuk" style="display:inline-flex; align-items:center; gap:6px;">
+                <?= Icon::get('check', 16) ?> <span id="btn-confirm-send-masuk-text">Ya, Kirim Presensi</span>
+            </button>
+        </div>
+    </div>
+</div>
+
 <script>
-document.addEventListener('DOMContentLoaded', () => {
+(() => {
+    function runPresensiMasuk() {
     const video = document.getElementById('webcam-video');
     const canvas = document.getElementById('snapshot-canvas');
     const submitBtn = document.getElementById('btn-submit-masuk');
@@ -342,6 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
             video.srcObject = cameraStream;
+            window.SGMCamera?.register(cameraStream);
             cameraState.status = 'ready';
             cameraState.errName = null;
 
@@ -354,6 +417,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
                     video.srcObject = cameraStream;
+                    window.SGMCamera?.register(cameraStream);
                     cameraState.status = 'ready';
                     cameraState.errName = null;
                     await video.play().catch(() => {});
@@ -375,11 +439,42 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function stopCamera() {
         if (cameraStream) {
-            cameraStream.getTracks().forEach(track => {
-                track.stop();
-            });
+            try {
+                cameraStream.getTracks().forEach(track => {
+                    track.enabled = false;
+                    track.stop();
+                });
+            } catch (e) {}
+            window.SGMCamera?.unregister(cameraStream);
             cameraStream = null;
         }
+
+        if (video) {
+            try {
+                if (video.srcObject) {
+                    const stream = video.srcObject;
+                    if (stream && stream.getTracks) {
+                        stream.getTracks().forEach(track => {
+                            track.enabled = false;
+                            track.stop();
+                        });
+                    }
+                }
+                video.pause();
+                video.srcObject = null;
+            } catch (e) {}
+        }
+    }
+
+    const btnKembali = document.getElementById('btn-kembali-presensi');
+    if (btnKembali) {
+        btnKembali.addEventListener('click', () => {
+            stopCamera();
+            if (map) {
+                try { map.remove(); } catch(e) {}
+                map = null;
+            }
+        });
     }
 
     btnSwitchCamera.addEventListener('click', async () => {
@@ -389,7 +484,20 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => btnSwitchCamera.classList.remove('switching'), 400);
     });
 
-    window.addEventListener('beforeunload', stopCamera);
+    const handleTeardownPresensi = () => {
+        stopCamera();
+        if (map) {
+            try { map.remove(); } catch(e) {}
+            map = null;
+        }
+    };
+
+    window.addEventListener('beforeunload', handleTeardownPresensi);
+    window.addEventListener('pagehide', handleTeardownPresensi);
+    window.addEventListener('popstate', handleTeardownPresensi);
+    document.addEventListener('turbo:before-visit', handleTeardownPresensi);
+    document.addEventListener('turbo:before-cache', handleTeardownPresensi);
+    document.addEventListener('turbo:before-render', handleTeardownPresensi);
 
     // 3. Inisialisasi Peta Leaflet
     function initMap(officeLat, officeLng, radiusMeters) {
@@ -491,9 +599,54 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     let isSubmitting = false;
+    let currentPhotoBase64 = null;
 
-    // 6. Handle Submit Absen Masuk (Ringan & Cepat Terkompresi)
-    submitBtn.addEventListener('click', async () => {
+    // Modal Konfirmasi Elements
+    const modalKonfirm = document.getElementById('modalKonfirmasiMasuk');
+    const previewImg = document.getElementById('preview-snapshot-img');
+    const modalTimeStamp = document.getElementById('modal-time-stamp');
+    const modalLokasiName = document.getElementById('modal-lokasi-name');
+    const modalDistanceText = document.getElementById('modal-distance-text');
+    const btnRetake = document.getElementById('btn-retake-foto');
+    const btnCloseModal = document.getElementById('btn-batal-modal-x');
+    const btnConfirmSend = document.getElementById('btn-confirm-send-masuk');
+    const btnConfirmSendText = document.getElementById('btn-confirm-send-masuk-text');
+
+    function openConfirmModal(photoBase64) {
+        currentPhotoBase64 = photoBase64;
+        previewImg.src = photoBase64;
+        modalTimeStamp.textContent = new Date().toLocaleTimeString('id-ID', { hour12: false }) + ' WIB';
+        if (selectLokasi && selectLokasi.selectedIndex >= 0) {
+            modalLokasiName.textContent = selectLokasi.options[selectLokasi.selectedIndex].text;
+        }
+        if (distanceMeter) {
+            modalDistanceText.textContent = distanceMeter.textContent + ' (Dalam Radius Kantor)';
+        }
+        modalKonfirm.classList.add('show');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeConfirmModal() {
+        modalKonfirm.classList.remove('show');
+        document.body.style.overflow = '';
+        currentPhotoBase64 = null;
+    }
+
+    if (btnRetake) btnRetake.addEventListener('click', closeConfirmModal);
+    if (btnCloseModal) btnCloseModal.addEventListener('click', closeConfirmModal);
+
+    modalKonfirm.addEventListener('click', (e) => {
+        if (e.target === modalKonfirm && !isSubmitting) closeConfirmModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modalKonfirm.classList.contains('show') && !isSubmitting) {
+            closeConfirmModal();
+        }
+    });
+
+    // 6. Handle Klik "Masuk Sekarang": Buka Modal Konfirmasi (Client-Side, Cepat & Aman)
+    submitBtn.addEventListener('click', () => {
         if (isSubmitting || submitBtn.disabled) return;
         if (!video.videoWidth) {
             showAlert('danger', 'Kamera belum siap, tunggu beberapa detik.');
@@ -504,10 +657,6 @@ document.addEventListener('DOMContentLoaded', () => {
             showAlert('danger', 'Lokasi GPS belum terdeteksi. Silakan aktifkan GPS.');
             return;
         }
-
-        isSubmitting = true;
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Memproses Presensi...';
 
         // Downscale canvas secara proporsional ke maksimal 640px agar encoding instan & hemat bandwidth
         const maxDimension = 640;
@@ -540,8 +689,21 @@ document.addEventListener('DOMContentLoaded', () => {
         // Kompresi ke JPEG dengan kualitas 0.70 (~35KB - 50KB, hemat 95% bandwidth)
         const photoBase64 = canvas.toDataURL('image/jpeg', 0.70);
 
+        // Tampilkan foto di Modal Konfirmasi untuk di-review oleh pegawai
+        openConfirmModal(photoBase64);
+    });
+
+    // 7. Handle Konfirmasi Final: Eksekusi Kirim Presensi ke Server
+    btnConfirmSend.addEventListener('click', async () => {
+        if (isSubmitting || !currentPhotoBase64) return;
+
+        isSubmitting = true;
+        btnConfirmSend.disabled = true;
+        btnRetake.disabled = true;
+        btnConfirmSendText.textContent = 'Mengirim Presensi...';
+
         const formData = new FormData();
-        formData.append('image', photoBase64);
+        formData.append('image', currentPhotoBase64);
         formData.append('latitude', gpsState.lat);
         formData.append('longitude', gpsState.lng);
         formData.append('lokasi_id', selectLokasi.value);
@@ -554,31 +716,45 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await resp.json();
 
             if (result.status === 'success') {
+                closeConfirmModal();
                 stopCamera(); // Segera matikan stream kamera ponsel
                 showAlert('success', result.message);
                 setTimeout(() => {
-                    window.location.href = result.redirect;
+                    if (window.Turbo) {
+                        Turbo.visit(result.redirect);
+                    } else {
+                        window.location.href = result.redirect;
+                    }
                 }, 1200);
             } else {
                 if (result.session_expired) {
+                    closeConfirmModal();
                     stopCamera();
                     showAlert('danger', result.message);
                     setTimeout(() => {
-                        window.location.href = result.redirect || '<?= Config::baseUrl("login") ?>';
+                        if (window.Turbo) {
+                            Turbo.visit(result.redirect || '<?= Config::baseUrl("login") ?>');
+                        } else {
+                            window.location.href = result.redirect || '<?= Config::baseUrl("login") ?>';
+                        }
                     }, 2000);
                     return;
                 }
+                closeConfirmModal();
                 showAlert('danger', result.message);
                 isSubmitting = false;
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Masuk Sekarang';
+                btnConfirmSend.disabled = false;
+                btnRetake.disabled = false;
+                btnConfirmSendText.textContent = 'Ya, Kirim Presensi';
             }
         } catch (e) {
             console.error(e);
+            closeConfirmModal();
             showAlert('danger', 'Terjadi kesalahan komunikasi dengan server.');
             isSubmitting = false;
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Masuk Sekarang';
+            btnConfirmSend.disabled = false;
+            btnRetake.disabled = false;
+            btnConfirmSendText.textContent = 'Ya, Kirim Presensi';
         }
     });
 
@@ -591,7 +767,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initCamera();
     initGeolocation();
-});
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', runPresensiMasuk);
+    } else {
+        runPresensiMasuk();
+    }
+})();
 </script>
 
 <?php require_once __DIR__ . '/../layouts/footer.php'; ?>

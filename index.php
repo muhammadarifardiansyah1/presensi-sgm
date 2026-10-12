@@ -16,6 +16,7 @@ require_once __DIR__ . '/app/Controllers/KetidakhadiranController.php';
 require_once __DIR__ . '/app/Controllers/ProfileController.php';
 require_once __DIR__ . '/app/Controllers/GajiController.php';
 require_once __DIR__ . '/app/Controllers/StorageController.php';
+require_once __DIR__ . '/app/Controllers/LemburController.php';
 
 // Parse requested URL route
 $requestUri = $_SERVER['REQUEST_URI'] ?? '/';
@@ -56,6 +57,10 @@ switch ($route) {
         (new DashboardController())->index();
         break;
 
+    case 'notifikasi':
+        (new DashboardController())->notifikasi();
+        break;
+
     case 'profil':
         (new ProfileController())->index();
         break;
@@ -74,6 +79,11 @@ switch ($route) {
 
     case 'presensi/keluar':
         (new PresensiController())->keluar();
+        break;
+
+    case 'riwayat':
+    case 'presensi/riwayat':
+        (new PresensiController())->riwayat();
         break;
 
     case 'master/lokasi':
@@ -113,7 +123,7 @@ switch ($route) {
         break;
 
     case 'master/jabatan/hapus':
-        $id = (int) ($_GET['id'] ?? 0);
+        $id = (int) ($_POST['id'] ?? ($_GET['id'] ?? 0));
         (new JabatanController())->hapus($id);
         break;
 
@@ -209,6 +219,14 @@ switch ($route) {
         (new GajiController())->simpanPengaturan();
         break;
 
+    case 'gaji/simpan-penyesuaian':
+        (new GajiController())->simpanPenyesuaian();
+        break;
+
+    case 'gaji/cetak-laporan':
+        (new GajiController())->cetakLaporan();
+        break;
+
     case 'gaji/slip-bulk':
         (new GajiController())->slipGajiBulk();
         break;
@@ -233,6 +251,47 @@ switch ($route) {
     case 'ketidakhadiran/reject':
         $id = (int) ($_GET['id'] ?? $_POST['id'] ?? 0);
         (new KetidakhadiranController())->reject($id);
+        break;
+
+    case 'ketidakhadiran/edit':
+        $id = (int) ($_GET['id'] ?? $_POST['id'] ?? 0);
+        (new KetidakhadiranController())->edit($id);
+        break;
+
+    case 'ketidakhadiran/hapus':
+        $id = (int) ($_GET['id'] ?? $_POST['id'] ?? 0);
+        (new KetidakhadiranController())->hapus($id);
+        break;
+
+    case 'ketidakhadiran/export-excel':
+        (new KetidakhadiranController())->exportExcel();
+        break;
+
+    case 'lembur':
+        (new LemburController())->index();
+        break;
+
+    case 'lembur/tambah':
+        (new LemburController())->tambah();
+        break;
+
+    case 'lembur/edit':
+        $id = (int) ($_GET['id'] ?? $_POST['id'] ?? 0);
+        (new LemburController())->edit($id);
+        break;
+
+    case 'lembur/detail':
+        $id = (int) ($_GET['id'] ?? 0);
+        (new LemburController())->detail($id);
+        break;
+
+    case 'lembur/hapus':
+        $id = (int) ($_GET['id'] ?? $_POST['id'] ?? 0);
+        (new LemburController())->hapus($id);
+        break;
+
+    case 'lembur/pegawai-lokasi':
+        (new LemburController())->getPegawaiByLokasiJson();
         break;
 
     default:

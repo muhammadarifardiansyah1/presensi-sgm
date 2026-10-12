@@ -14,6 +14,13 @@ if (!empty($flashMsg)) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Masuk - <?= Config::APP_TITLE ?></title>
 
+    <!-- Favicon & App Icons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="<?= Config::baseUrl('assets/images/favicon-32x32.png') ?>?v=<?= filemtime(__DIR__ . '/../../../assets/images/favicon-32x32.png') ?>">
+    <link rel="icon" type="image/png" sizes="16x16" href="<?= Config::baseUrl('assets/images/favicon-16x16.png') ?>?v=<?= filemtime(__DIR__ . '/../../../assets/images/favicon-16x16.png') ?>">
+    <link rel="apple-touch-icon" sizes="180x180" href="<?= Config::baseUrl('assets/images/apple-touch-icon.png') ?>?v=<?= filemtime(__DIR__ . '/../../../assets/images/apple-touch-icon.png') ?>">
+    <link rel="icon" type="image/png" sizes="192x192" href="<?= Config::baseUrl('assets/images/favicon-192x192.png') ?>?v=<?= filemtime(__DIR__ . '/../../../assets/images/favicon-192x192.png') ?>">
+    <link rel="shortcut icon" href="<?= Config::baseUrl('favicon.ico') ?>?v=<?= filemtime(__DIR__ . '/../../../favicon.ico') ?>">
+
     <!-- Anti-FOUC Early Theme Initializer -->
     <script>
         (function() {

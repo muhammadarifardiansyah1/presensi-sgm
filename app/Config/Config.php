@@ -8,6 +8,13 @@ date_default_timezone_set('Asia/Jakarta');
 
 // Start session with secure parameters & active garbage collection (mencegah penumpukan file session di hosting)
 if (session_status() === PHP_SESSION_NONE) {
+    // Pada environment Serverless (seperti Vercel / AWS Lambda), hanya folder /tmp yang dapat ditulis
+    if (getenv('VERCEL') || !empty($_SERVER['VERCEL']) || getenv('AWS_LAMBDA_FUNCTION_NAME')) {
+        if (is_dir('/tmp') && is_writable('/tmp')) {
+            @session_save_path('/tmp');
+        }
+    }
+
     ini_set('session.cookie_httponly', '1');
     ini_set('session.use_only_cookies', '1');
     ini_set('session.gc_probability', '1');
@@ -18,12 +25,12 @@ if (session_status() === PHP_SESSION_NONE) {
         'lifetime' => 43200, // 12 jam
         'path'     => '/',
         'domain'   => '',
-        'secure'   => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'),
+        'secure'   => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https'),
         'httponly' => true,
         'samesite' => 'Lax'
     ]);
 
-    session_start();
+    @session_start();
 }
 
 class Config {
@@ -32,18 +39,31 @@ class Config {
     const APP_TAGLINE = 'Absen Foto & Lokasi GPS';
     const VERSION = '1.0.0';
 
-    // Database Configuration (Default untuk Laragon lokal, dapat di-override lewat ENV)
+    // Database Configuration (Default lokal Laragon, dapat di-override lewat ENV / TiDB Cloud Serverless)
     const DB_HOST = '127.0.0.1';
     const DB_PORT = '3306';
     const DB_USER = 'root';
     const DB_PASS = 'root';
     const DB_NAME = 'absensi_sgm';
 
-    public static function getDbHost(): string { return getenv('DB_HOST') ?: self::DB_HOST; }
-    public static function getDbPort(): string { return getenv('DB_PORT') ?: self::DB_PORT; }
-    public static function getDbUser(): string { return getenv('DB_USER') ?: self::DB_USER; }
-    public static function getDbPass(): string { return getenv('DB_PASS') !== false ? getenv('DB_PASS') : self::DB_PASS; }
-    public static function getDbName(): string { return getenv('DB_NAME') ?: self::DB_NAME; }
+    public static function getDbHost(): string { 
+        return getenv('TIDB_HOST') ?: (getenv('DB_HOST') ?: self::DB_HOST); 
+    }
+    public static function getDbPort(): string { 
+        return getenv('TIDB_PORT') ?: (getenv('DB_PORT') ?: self::DB_PORT); 
+    }
+    public static function getDbUser(): string { 
+        return getenv('TIDB_USER') ?: (getenv('DB_USER') ?: self::DB_USER); 
+    }
+    public static function getDbPass(): string { 
+        if (getenv('TIDB_PASSWORD') !== false && getenv('TIDB_PASSWORD') !== null) return getenv('TIDB_PASSWORD');
+        if (getenv('TIDB_PASS') !== false && getenv('TIDB_PASS') !== null) return getenv('TIDB_PASS');
+        if (getenv('DB_PASS') !== false && getenv('DB_PASS') !== null) return getenv('DB_PASS');
+        return self::DB_PASS; 
+    }
+    public static function getDbName(): string { 
+        return getenv('TIDB_DATABASE') ?: (getenv('DB_NAME') ?: self::DB_NAME); 
+    }
 
     /**
      * Get Base URL dynamically (Mendukung SSL reguler, Cloudflare, dan reverse proxy hosting)

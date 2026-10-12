@@ -64,7 +64,7 @@ $tanggalSelesaiSelected = $tanggalSelesai ?? $tanggalMulaiSelected;
 <div class="form-card" style="padding: 16px 20px; margin-bottom: 24px;">
     <form method="GET" action="<?= Config::baseUrl('laporan/harian') ?>" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
         <?php if (($currentUser['role'] ?? '') === 'admin'): ?>
-            <a href="<?= Config::baseUrl("laporan/export-excel-harian?tanggal_mulai={$tanggalMulaiSelected}&tanggal_selesai={$tanggalSelesaiSelected}") ?>" class="btn btn-blue">
+            <a href="<?= Config::baseUrl("laporan/export-excel-harian?tanggal_mulai={$tanggalMulaiSelected}&tanggal_selesai={$tanggalSelesaiSelected}") ?>" data-turbo="false" class="btn btn-blue">
                 Export Excel
             </a>
             <button type="button" class="btn btn-primary" onclick="bukaModalTambahPresensi()" style="display:inline-flex; align-items:center; gap:6px;">
@@ -95,12 +95,18 @@ $tanggalSelesaiSelected = $tanggalSelesai ?? $tanggalMulaiSelected;
 </div>
 
 <div class="table-card">
-    <div class="table-toolbar">
-        <div class="table-toolbar-left">
-            <div class="table-toolbar-group">
-                <label for="sortHarian" style="font-weight:600;">Urutkan:</label>
-                <select id="sortHarian" class="table-sort-select" data-table="#rekapHarianTable">
-                    <option value="default">Default (Urutan Asli)</option>
+    <div class="looker-filter-bar" data-table="#rekapHarianTable">
+        <div class="looker-filter-bar-left">
+            <!-- Quick Search Input -->
+            <div class="looker-search-box">
+                <span class="looker-search-icon"><?= Icon::get('search', 14) ?></span>
+                <input type="text" class="looker-search-input" data-table="#rekapHarianTable" placeholder="Cari Nama Pegawai...">
+            </div>
+
+            <!-- Sort Select -->
+            <div class="looker-sort-box">
+                <select class="table-sort-select" data-table="#rekapHarianTable">
+                    <option value="default">Urutkan: Default</option>
                     <option value="masuk-desc">Jam Masuk (Paling Akhir)</option>
                     <option value="masuk-asc">Jam Masuk (Paling Awal)</option>
                     <option value="tanggal-desc">Tanggal (Terbaru)</option>
@@ -111,17 +117,54 @@ $tanggalSelesaiSelected = $tanggalSelesai ?? $tanggalMulaiSelected;
                     <option value="terlambat-desc">Keterlambatan (Paling Lama)</option>
                 </select>
             </div>
-            <div class="table-toolbar-group">
-                <label for="filterKetHarian" style="font-weight:600;">Kategori:</label>
-                <select id="filterKetHarian" class="table-filter-select" data-table="#rekapHarianTable" data-filter-col="terlambat">
-                    <option value="">Semua Kategori</option>
-                    <option value="tepat">Tepat Waktu</option>
-                    <option value="terlambat">Terlambat</option>
-                </select>
+
+            <!-- Filter Pill: Keterlambatan -->
+            <div class="looker-pill-wrapper" data-table="#rekapHarianTable" data-filter-col="terlambat" data-label="Ketepatan Waktu">
+                <button type="button" class="looker-filter-pill">
+                    <span class="looker-pill-text">Ketepatan Waktu</span>
+                    <span class="looker-pill-badge" style="display:none;"></span>
+                    <span class="looker-pill-caret">▼</span>
+                </button>
+                <div class="looker-popover">
+                    <div class="looker-popover-header">
+                        <label class="looker-select-all-label">
+                            <input type="checkbox" class="looker-select-all-input" checked> Pilih Semua
+                        </label>
+                    </div>
+                    <div class="looker-popover-search">
+                        <span class="looker-popover-search-icon"><?= Icon::get('search', 12) ?></span>
+                        <input type="text" class="looker-popover-input" placeholder="Cari status...">
+                    </div>
+                    <div class="looker-checklist">
+                        <label class="looker-check-item">
+                            <span class="looker-check-left">
+                                <input type="checkbox" value="tepat" checked>
+                                <span class="looker-check-label">Tepat Waktu</span>
+                            </span>
+                            <span class="looker-check-count"></span>
+                        </label>
+                        <label class="looker-check-item">
+                            <span class="looker-check-left">
+                                <input type="checkbox" value="terlambat" checked>
+                                <span class="looker-check-label">Terlambat</span>
+                            </span>
+                            <span class="looker-check-count"></span>
+                        </label>
+                    </div>
+                    <div class="looker-popover-footer">
+                        <span class="looker-footer-status">Semua dipilih</span>
+                        <button type="button" class="looker-clear-btn">Reset</button>
+                    </div>
+                </div>
             </div>
+
+            <!-- Reset All Button -->
+            <button type="button" class="looker-reset-all-btn" data-table="#rekapHarianTable" title="Reset semua filter">
+                <?= Icon::get('refresh-cw', 13) ?> Reset
+            </button>
         </div>
-        <div style="font-size:0.78rem; color:var(--text-muted);">
-            💡 Klik header kolom untuk urutkan instan
+        <div class="looker-filter-bar-right">
+            <span class="looker-row-count"></span>
         </div>
     </div>
     <div class="table-responsive">
@@ -169,8 +212,8 @@ $tanggalSelesaiSelected = $tanggalSelesai ?? $tanggalMulaiSelected;
                             </td>
                             <td style="text-align: center;">
                                 <?php if (!empty($row['foto_masuk'])): ?>
-                                    <a href="<?= Config::baseUrl('assets/images/uploads/presensi/' . $row['foto_masuk']) ?>" target="_blank" title="Lihat Foto Masuk">
-                                        <img src="<?= Config::baseUrl('assets/images/uploads/presensi/' . $row['foto_masuk']) ?>" class="img-thumb-table" alt="Foto Masuk">
+                                    <a href="<?= ImageHelper::getPhotoUrl($row['foto_masuk'], 'presensi') ?>" target="_blank" title="Lihat Foto Masuk">
+                                        <img src="<?= ImageHelper::getPhotoUrl($row['foto_masuk'], 'presensi') ?>" class="img-thumb-table" alt="Foto Masuk">
                                     </a>
                                 <?php else: ?>
                                     <span style="color:var(--text-subtle);">-</span>
@@ -181,8 +224,8 @@ $tanggalSelesaiSelected = $tanggalSelesai ?? $tanggalMulaiSelected;
                             </td>
                             <td style="text-align: center;">
                                 <?php if (!empty($row['foto_keluar'])): ?>
-                                    <a href="<?= Config::baseUrl('assets/images/uploads/presensi/' . $row['foto_keluar']) ?>" target="_blank" title="Lihat Foto Keluar">
-                                        <img src="<?= Config::baseUrl('assets/images/uploads/presensi/' . $row['foto_keluar']) ?>" class="img-thumb-table" alt="Foto Keluar">
+                                    <a href="<?= ImageHelper::getPhotoUrl($row['foto_keluar'], 'presensi') ?>" target="_blank" title="Lihat Foto Keluar">
+                                        <img src="<?= ImageHelper::getPhotoUrl($row['foto_keluar'], 'presensi') ?>" class="img-thumb-table" alt="Foto Keluar">
                                     </a>
                                 <?php else: ?>
                                     <span style="color:var(--text-subtle);">-</span>
@@ -220,7 +263,10 @@ $tanggalSelesaiSelected = $tanggalSelesai ?? $tanggalMulaiSelected;
                                         </button>
                                         <a href="<?= Config::baseUrl('laporan/hapus-presensi?id=' . $row['id']) ?>" 
                                            class="btn btn-danger btn-sm" 
-                                           onclick="return confirm('Apakah Anda yakin ingin menghapus data presensi ini? Pegawai akan dapat melakukan presensi ulang.');"
+                                           data-confirm="Apakah Anda yakin ingin menghapus catatan presensi ini? Pegawai akan dapat melakukan presensi ulang untuk tanggal ini."
+                                           data-confirm-title="Hapus / Reset Presensi Pegawai"
+                                           data-confirm-type="danger"
+                                           data-confirm-btn="Ya, Hapus Presensi"
                                            title="Hapus / Reset Presensi">
                                             <?= Icon::get('trash', 14) ?>
                                         </a>
@@ -414,13 +460,21 @@ function bukaModalEditPresensi(id) {
                 document.getElementById('edit_jam_lembur').value = data.jam_lembur || 0;
                 document.getElementById('edit_keterangan_admin').value = data.keterangan_admin || '';
             } else {
-                alert('Gagal mengambil data presensi');
+                if (window.SGMDialog) {
+                    window.SGMDialog.toast('Gagal mengambil data presensi', 'danger');
+                } else {
+                    alert('Gagal mengambil data presensi');
+                }
                 tutupModalEditPresensi();
             }
         })
         .catch(err => {
             console.error(err);
-            alert('Terjadi kesalahan koneksi');
+            if (window.SGMDialog) {
+                window.SGMDialog.toast('Terjadi kesalahan koneksi ke server', 'danger');
+            } else {
+                alert('Terjadi kesalahan koneksi');
+            }
             tutupModalEditPresensi();
         });
 }

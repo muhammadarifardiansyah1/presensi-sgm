@@ -6,6 +6,7 @@
 
 require_once __DIR__ . '/../Config/Config.php';
 require_once __DIR__ . '/../Models/User.php';
+require_once __DIR__ . '/../Helpers/RateLimiter.php';
 
 class AuthController {
     private User $userModel;
@@ -138,11 +139,45 @@ class AuthController {
             $username = trim($_POST['username'] ?? '');
             $password = trim($_POST['password'] ?? '');
 
+            $ip = RateLimiter::getIp();
+            $rateKeyIp = 'login:ip:' . $ip;
+            $rateKeyUser = 'login:user:' . $ip . ':' . strtolower($username);
+
+            // Cek apakah IP atau User sedang dalam masa pembatasan (Lockout)
+            if (RateLimiter::tooManyAttempts($rateKeyUser, 5) || RateLimiter::tooManyAttempts($rateKeyIp, 15)) {
+                $seconds = max(RateLimiter::availableIn($rateKeyUser), RateLimiter::availableIn($rateKeyIp));
+                $minutes = ceil($seconds / 60);
+
+                http_response_code(429);
+                header('Retry-After: ' . $seconds);
+
+                $isAjax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') 
+                    || (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false);
+
+                if ($isAjax) {
+                    header('Content-Type: application/json; charset=utf-8');
+                    echo json_encode([
+                        'status' => 'error',
+                        'message' => "Terlalu banyak percobaan login gagal. Silakan tunggu {$seconds} detik lagi.",
+                        'retry_after' => $seconds
+                    ]);
+                    exit;
+                }
+
+                $error = "Terlalu banyak percobaan login gagal. Demi keamanan, akun/IP Anda dibatasi sementara. Silakan tunggu {$seconds} detik (±{$minutes} menit) lagi.";
+                require_once __DIR__ . '/../Views/auth/login.php';
+                return;
+            }
+
             if ($username === '' || $password === '') {
                 $error = 'Username dan password wajib diisi!';
             } else {
                 $user = $this->userModel->findByUsername($username);
                 if ($user && $user['status'] === 'aktif' && password_verify($password, $user['password'])) {
+                    // Reset counter percobaan login gagal jika berhasil
+                    RateLimiter::clear($rateKeyUser);
+                    RateLimiter::clear($rateKeyIp);
+
                     // Regenerate session id untuk mencegah session fixation
                     session_regenerate_id(true);
                     $newSessionId = session_id();
@@ -166,7 +201,19 @@ class AuthController {
                     header("Location: " . $redirect);
                     exit;
                 } else {
-                    $error = 'Username atau password tidak sesuai, atau akun nonaktif!';
+                    // Catat kegagalan login & hitung sisa percobaan
+                    RateLimiter::hit($rateKeyUser, 300); // 5 menit lockout window
+                    RateLimiter::hit($rateKeyIp, 300);
+
+                    $remaining = RateLimiter::remainingAttempts($rateKeyUser, 5);
+                    if ($remaining > 0) {
+                        $error = "Username atau password tidak sesuai, atau akun nonaktif! (Sisa percobaan: {$remaining})";
+                    } else {
+                        $seconds = RateLimiter::availableIn($rateKeyUser);
+                        http_response_code(429);
+                        header('Retry-After: ' . $seconds);
+                        $error = "Terlalu banyak percobaan login gagal. Akun Anda dibatasi sementara selama {$seconds} detik demi keamanan.";
+                    }
                 }
             }
         }

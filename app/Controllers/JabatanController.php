@@ -17,7 +17,7 @@ class JabatanController {
 
     public function index(): void {
         $currentUser = AuthController::checkAdmin();
-        $jabatanList = $this->jabatanModel->getAll();
+        $jabatanList = $this->jabatanModel->getAllWithUsage();
         require_once __DIR__ . '/../Views/master/jabatan_index.php';
     }
 

@@ -189,11 +189,39 @@ require_once __DIR__ . '/../layouts/header.php';
 <script>
 function confirmExecuteCleanup() {
     const sel = document.getElementById('cleanupDays');
-    const selectedDays = sel.options[sel.selectedIndex].text;
+    const selectedDays = sel ? sel.options[sel.selectedIndex].text : '';
     
-    if (confirm("⚠️ PERINGATAN KONFIRMASI PEMBERSIHAN FOTO:\n\nAnda akan menghapus berkas fisik foto presensi dengan kriteria:\n" + selectedDays + "\n\nCatatan Penting:\n- Berkas fisik foto di disk server akan dihapus permanen.\n- Seluruh riwayat presensi di database (tanggal, jam, koordinat, status) TETAP UTUH.\n\nApakah Anda yakin ingin melanjutkan eksekusi nyata?")) {
-        document.getElementById('cleanupMode').value = 'execute';
-        document.getElementById('formCleanup').submit();
+    const message = `
+        <div style="font-size: 0.95rem; margin-bottom: 8px;">
+            Anda akan menghapus berkas fisik foto presensi dengan kriteria:<br>
+            <strong style="color: var(--danger, #ef4444); font-size: 1.05rem;">${selectedDays}</strong>
+        </div>
+        <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; padding: 12px; margin-top: 10px; font-size: 0.85rem; text-align: left; line-height: 1.5;">
+            <strong style="color: var(--danger, #ef4444);">Catatan Penting:</strong>
+            <ul style="margin: 6px 0 0 16px; padding: 0;">
+                <li>Berkas fisik foto di disk server akan dihapus <strong>permanen</strong>.</li>
+                <li>Seluruh riwayat presensi di database (tanggal, jam, koordinat, status) <strong>TETAP UTUH</strong>.</li>
+            </ul>
+        </div>
+    `;
+
+    if (window.SGMDialog && typeof window.SGMDialog.confirm === 'function') {
+        window.SGMDialog.confirm({
+            title: 'Pembersihan Berkas Foto Fisik',
+            message: message,
+            type: 'danger',
+            confirmText: 'Ya, Bersihkan Permanen',
+            cancelText: 'Batalkan',
+            onConfirm: function() {
+                document.getElementById('cleanupMode').value = 'execute';
+                document.getElementById('formCleanup').submit();
+            }
+        });
+    } else {
+        if (confirm("⚠️ PERINGATAN KONFIRMASI PEMBERSIHAN FOTO:\n\nAnda akan menghapus berkas fisik foto presensi dengan kriteria:\n" + selectedDays + "\n\nCatatan Penting:\n- Berkas fisik foto di disk server akan dihapus permanen.\n- Seluruh riwayat presensi di database (tanggal, jam, koordinat, status) TETAP UTUH.\n\nApakah Anda yakin ingin melanjutkan eksekusi nyata?")) {
+            document.getElementById('cleanupMode').value = 'execute';
+            document.getElementById('formCleanup').submit();
+        }
     }
 }
 </script>

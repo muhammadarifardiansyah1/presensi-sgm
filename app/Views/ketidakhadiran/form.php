@@ -16,7 +16,7 @@ require_once __DIR__ . '/../layouts/header.php';
 <?php endif; ?>
 
 <div class="form-card" style="max-width: 650px; margin: 0 auto;">
-    <form method="POST" enctype="multipart/form-data">
+    <form method="POST" enctype="multipart/form-data" data-turbo="false">
         <div class="form-group">
             <label class="form-label" for="kategori">Kategori Pengajuan *</label>
             <select id="kategori" name="kategori" class="form-select" required>
@@ -26,7 +26,7 @@ require_once __DIR__ . '/../layouts/header.php';
             </select>
         </div>
 
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <div class="form-row-2col">
             <div class="form-group">
                 <label class="form-label" for="tanggal_mulai">Tanggal Mulai *</label>
                 <input type="date" id="tanggal_mulai" name="tanggal_mulai" class="form-input" 
@@ -64,8 +64,10 @@ require_once __DIR__ . '/../layouts/header.php';
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
+(() => {
+function initKetidakhadiranForm() {
     const fileInput = document.getElementById('dokumen');
+    if (!fileInput) return;
     const fileError = document.getElementById('file-error');
     const fileFeedback = document.getElementById('file-feedback');
     const submitBtn = document.getElementById('btn-submit');
@@ -208,7 +210,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (isCompressing) {
             e.preventDefault();
-            alert('Mohon tunggu sebentar, foto lampiran sedang dioptimasi...');
+            if (window.SGMDialog && typeof window.SGMDialog.toast === 'function') {
+                window.SGMDialog.toast('Mohon tunggu sebentar, foto lampiran sedang dioptimasi...', 'info');
+            } else {
+                alert('Mohon tunggu sebentar, foto lampiran sedang dioptimasi...');
+            }
             return false;
         }
 
@@ -218,7 +224,14 @@ document.addEventListener('DOMContentLoaded', () => {
         submitBtn.style.opacity = '0.75';
         submitBtn.style.cursor = 'not-allowed';
     });
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initKetidakhadiranForm);
+} else {
+    initKetidakhadiranForm();
+}
+})();
 </script>
 
 <?php require_once __DIR__ . '/../layouts/footer.php'; ?>

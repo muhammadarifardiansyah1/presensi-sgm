@@ -21,7 +21,7 @@ require_once __DIR__ . '/../layouts/header.php';
     </div>
 <?php endif; ?>
 
-<div class="profile-layout-grid" style="display: grid; grid-template-columns: 320px 1fr; gap: 28px; align-items: start;">
+<div class="profile-layout-grid">
     
     <!-- Kolom Kiri: Kartu Ringkasan Akun -->
     <div class="form-card profile-summary-card" style="padding: 28px; text-align: center;">
@@ -89,8 +89,8 @@ require_once __DIR__ . '/../layouts/header.php';
                 </div>
             </div>
 
-            <form method="POST" action="<?= Config::baseUrl('profil/update') ?>" enctype="multipart/form-data">
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin-bottom: 18px;">
+            <form method="POST" action="<?= Config::baseUrl('profil/update') ?>" enctype="multipart/form-data" data-turbo="false">
+                <div class="form-row-grid">
                     <div class="form-group">
                         <label class="form-label" for="nik">Nomor Induk Karyawan (NIK)</label>
                         <input type="text" id="nik" class="form-input" value="<?= htmlspecialchars($user['nik'] ?? '') ?>" disabled style="background: var(--bg-subtle); cursor: not-allowed; font-family: 'JetBrains Mono', monospace;">
@@ -104,7 +104,7 @@ require_once __DIR__ . '/../layouts/header.php';
                     </div>
                 </div>
 
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin-bottom: 18px;">
+                <div class="form-row-grid">
                     <div class="form-group">
                         <label class="form-label" for="nama">Nama Lengkap <span style="color: var(--danger);">*</span></label>
                         <input type="text" id="nama" name="nama" class="form-input" value="<?= htmlspecialchars($user['nama'] ?? '') ?>" required placeholder="Masukkan nama lengkap">
@@ -119,7 +119,7 @@ require_once __DIR__ . '/../layouts/header.php';
                     </div>
                 </div>
 
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin-bottom: 18px;">
+                <div class="form-row-grid">
                     <div class="form-group">
                         <label class="form-label" for="no_handphone">Nomor Handphone / WhatsApp</label>
                         <input type="tel" id="no_handphone" name="no_handphone" class="form-input" value="<?= htmlspecialchars($user['no_handphone'] ?? '') ?>" placeholder="08xxxxxxxxxx">
@@ -164,7 +164,7 @@ require_once __DIR__ . '/../layouts/header.php';
                     </div>
                 </div>
 
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin-bottom: 24px;">
+                <div class="form-row-grid">
                     <div class="form-group">
                         <label class="form-label" for="new_password">Password Baru <span style="color: var(--danger);">*</span></label>
                         <div class="password-wrapper" style="position: relative;">

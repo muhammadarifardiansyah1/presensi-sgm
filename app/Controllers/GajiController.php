@@ -37,6 +37,9 @@ class GajiController {
 
         $spreadsheetUrl = Config::getSpreadsheetUrl();
         $spreadsheetWebhookUrl = Config::getSpreadsheetWebhookUrl();
+        $penandatanganKoordinator = Config::getSetting('payroll_penandatangan_koordinator') ?: 'Koordinator';
+        $penandatanganSupervisor = Config::getSetting('payroll_penandatangan_supervisor') ?: 'Supervisor Operasional';
+        $penandatanganManajer = Config::getSetting('payroll_penandatangan_manajer') ?: 'Manajer Operasional';
 
         require_once __DIR__ . '/../Views/gaji/index.php';
     }
@@ -114,7 +117,85 @@ class GajiController {
     }
 
     /**
-     * Simpan Pengaturan Link Spreadsheet & Tarif
+     * Simpan Batch Penyesuaian Payroll Bulanan (PL, Lain-lain, Catatan, Override)
+     */
+    public function simpanPenyesuaian(): void {
+        AuthController::checkAdmin();
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            header('Location: ' . Config::baseUrl('gaji'));
+            exit;
+        }
+
+        $bulan = (int)($_POST['bulan'] ?? date('m'));
+        $tahun = (int)($_POST['tahun'] ?? date('Y'));
+        $penyesuaian = $_POST['penyesuaian'] ?? [];
+
+        $isAjax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') 
+                  || (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false);
+
+        if (!is_array($penyesuaian)) {
+            if ($isAjax) {
+                header('Content-Type: application/json');
+                echo json_encode(['success' => false, 'message' => 'Data penyesuaian tidak valid.']);
+                exit;
+            }
+            header('Location: ' . Config::baseUrl("gaji?bulan={$bulan}&tahun={$tahun}&err=invalid_data"));
+            exit;
+        }
+
+        $saved = $this->gajiModel->saveBatchPenyesuaian($bulan, $tahun, $penyesuaian);
+
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            if ($saved) {
+                echo json_encode([
+                    'success' => true, 
+                    'message' => 'Data penyesuaian payroll (Pengganti Libur & Lain-lain) berhasil disimpan!'
+                ]);
+            } else {
+                echo json_encode([
+                    'success' => false, 
+                    'message' => 'Gagal menyimpan data penyesuaian ke database.'
+                ]);
+            }
+            exit;
+        }
+
+        if ($saved) {
+            header('Location: ' . Config::baseUrl("gaji?bulan={$bulan}&tahun={$tahun}&msg=penyesuaian_saved"));
+        } else {
+            header('Location: ' . Config::baseUrl("gaji?bulan={$bulan}&tahun={$tahun}&err=penyesuaian_failed"));
+        }
+        exit;
+    }
+
+    /**
+     * Cetak Laporan Gaji Resmi Format RSUD RA Basoeni (A4 Landscape)
+     */
+    public function cetakLaporan(): void {
+        AuthController::checkAdmin();
+
+        $bulan = (int)($_GET['bulan'] ?? date('m'));
+        $tahun = (int)($_GET['tahun'] ?? date('Y'));
+
+        $namaBulan = [
+            1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April',
+            5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus',
+            9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'
+        ];
+        $periodeText = ($namaBulan[$bulan] ?? $bulan) . ' ' . $tahun;
+
+        $rekapPayroll = $this->gajiModel->getRekapPayroll($bulan, $tahun);
+        $penandatanganKoordinator = Config::getSetting('payroll_penandatangan_koordinator') ?: 'Koordinator';
+        $penandatanganSupervisor = Config::getSetting('payroll_penandatangan_supervisor') ?: 'Supervisor Operasional';
+        $penandatanganManajer = Config::getSetting('payroll_penandatangan_manajer') ?: 'Manajer Operasional';
+
+        require_once __DIR__ . '/../Views/gaji/cetak_laporan.php';
+    }
+
+    /**
+     * Simpan Pengaturan Link Spreadsheet, Signers & Tarif
      */
     public function simpanPengaturan(): void {
         AuthController::checkAdmin();
@@ -152,20 +233,32 @@ class GajiController {
                 }
             }
 
+            if (isset($_POST['payroll_penandatangan_koordinator'])) {
+                Config::setSetting('payroll_penandatangan_koordinator', trim($_POST['payroll_penandatangan_koordinator']));
+            }
+            if (isset($_POST['payroll_penandatangan_supervisor'])) {
+                Config::setSetting('payroll_penandatangan_supervisor', trim($_POST['payroll_penandatangan_supervisor']));
+            }
+            if (isset($_POST['payroll_penandatangan_manajer'])) {
+                Config::setSetting('payroll_penandatangan_manajer', trim($_POST['payroll_penandatangan_manajer']));
+            }
+
             // Simpan tarif jabatan jika ada (dengan perlindungan angka negatif & sanitasi angka)
             if (!empty($_POST['tarif']) && is_array($_POST['tarif'])) {
                 foreach ($_POST['tarif'] as $jabatan => $t) {
-                    $gajiPokok     = max(0, (float)($t['gaji_pokok'] ?? 3500000));
-                    $uangMakan     = max(0, (float)($t['uang_makan_harian'] ?? 25000));
-                    $tarifLembur   = max(0, (float)($t['tarif_lembur_per_jam'] ?? 25000));
-                    $potonganAlpa  = max(0, (float)($t['potongan_alpa_per_hari'] ?? 100000));
+                    $gajiPokok           = max(0, (float)($t['gaji_pokok'] ?? 3500000));
+                    $uangMakan           = max(0, (float)($t['uang_makan_harian'] ?? 0));
+                    $tarifLembur         = max(0, (float)($t['tarif_lembur_per_jam'] ?? 20000));
+                    $potonganAlpa        = max(0, (float)($t['potongan_alpa_per_hari'] ?? 52000));
+                    $tarifPenggantiLibur = max(0, (float)($t['tarif_pengganti_libur_per_hari'] ?? 52000));
 
                     $this->gajiModel->savePengaturan([
                         'jabatan' => trim($jabatan),
                         'gaji_pokok' => $gajiPokok,
                         'uang_makan_harian' => $uangMakan,
                         'tarif_lembur_per_jam' => $tarifLembur,
-                        'potongan_alpa_per_hari' => $potonganAlpa
+                        'potongan_alpa_per_hari' => $potonganAlpa,
+                        'tarif_pengganti_libur_per_hari' => $tarifPenggantiLibur
                     ]);
                 }
             }

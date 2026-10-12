@@ -51,7 +51,7 @@ class SpreadsheetHelper {
         $bestDelimiter = ',';
         $maxCount = 0;
         foreach ($delimiters as $d) {
-            $count = count(str_getcsv($firstLine, $d));
+            $count = count(str_getcsv($firstLine, $d, '"', "\\"));
             if ($count > $maxCount) {
                 $maxCount = $count;
                 $bestDelimiter = $d;
@@ -59,13 +59,13 @@ class SpreadsheetHelper {
         }
 
         // Parse header
-        $rawHeaders = str_getcsv($firstLine, $bestDelimiter);
+        $rawHeaders = str_getcsv($firstLine, $bestDelimiter, '"', "\\");
         $headers = self::normalizeHeaders($rawHeaders);
 
         $rows = [];
         $lineNum = 2;
 
-        while (($data = fgetcsv($handle, 0, $bestDelimiter)) !== false) {
+        while (($data = fgetcsv($handle, 0, $bestDelimiter, '"', "\\")) !== false) {
             if (empty($data) || (count($data) === 1 && trim($data[0] ?? '') === '')) {
                 $lineNum++;
                 continue; // Skip empty rows
@@ -495,25 +495,25 @@ class SpreadsheetHelper {
             'NIK',
             'Nama Pegawai',
             'Jabatan',
+            'Status (L/P)',
             'Lokasi Presensi',
-            'Hari Kerja Standar',
             'Hari Hadir',
-            'Sakit',
-            'Izin',
-            'Cuti',
-            'Alpa',
-            'Total Jam Lembur',
+            'Absen (Hari)',
+            'Pengganti Libur (Hari)',
+            'Lembur (Jam)',
             'Gaji Pokok (Rp)',
-            'Uang Makan (Rp)',
+            'Uang Pengganti Libur (Rp)',
             'Uang Lembur (Rp)',
-            'Potongan Alpa (Rp)',
-            'Gaji Bersih / Take Home Pay (Rp)'
+            'Potongan Absen (Rp)',
+            'Lain-Lain (Rp)',
+            'Gaji Bersih / Total Diterima (Rp)',
+            'Keterangan'
         ];
 
         $output = "\xEF\xBB\xBF"; // UTF-8 BOM
         $fp = fopen('php://temp', 'r+');
 
-        fputcsv($fp, ['REKAP PENGGAJIAN & PRESENSI KARYAWAN CV SURYA GEMILANG MOJOPAHIT'], ',', '"', "\\");
+        fputcsv($fp, ['REKAP PENGGAJIAN & LAPORAN GAJI KARYAWAN'], ',', '"', "\\");
         if ($periode) {
             fputcsv($fp, ['Periode: ' . $periode], ',', '"', "\\");
         }
@@ -528,19 +528,19 @@ class SpreadsheetHelper {
                 $r['nik'],
                 $r['nama'],
                 $r['jabatan'],
-                $r['nama_lokasi'],
-                $r['hari_kerja_bulan'],
-                $r['hadir'],
-                $r['sakit'],
-                $r['izin'],
-                $r['cuti'],
-                $r['alpa'],
-                number_format((float)$r['jam_lembur'], 2, '.', ''),
-                (float)$r['gaji_pokok'],
-                (float)$r['uang_makan'],
-                (float)$r['uang_lembur'],
-                (float)$r['potongan_alpa'],
-                (float)$r['take_home_pay']
+                $r['status_gender'] ?? 'L',
+                $r['nama_lokasi'] ?? '',
+                $r['hadir'] ?? 0,
+                $r['alpa'] ?? 0,
+                $r['pengganti_libur_hari'] ?? 0,
+                number_format((float)($r['jam_lembur'] ?? 0), 2, '.', ''),
+                (float)($r['gaji_pokok'] ?? 0),
+                (float)($r['uang_pengganti_libur'] ?? 0),
+                (float)($r['uang_lembur'] ?? 0),
+                (float)($r['potongan_alpa'] ?? 0),
+                (float)($r['lain_lain'] ?? 0),
+                (float)($r['take_home_pay'] ?? 0),
+                $r['keterangan_penyesuaian'] ?? ''
             ];
             fputcsv($fp, $row, ',', '"', "\\");
         }

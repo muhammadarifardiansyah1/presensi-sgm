@@ -197,4 +197,35 @@ class ImageHelper {
 
         return null;
     }
+
+    /**
+     * Dapatkan URL publik gambar (Mendukung link Google Drive dan penyimpanan lokal)
+     */
+    public static function getPhotoUrl(?string $filePath, string $subfolder = 'presensi', string $default = ''): string {
+        if (empty($filePath)) {
+            return !empty($default) ? Config::baseUrl($default) : Config::baseUrl('assets/images/default-avatar.png');
+        }
+
+        // Jika path sudah berupa URL eksternal (Google Drive / Cloud)
+        if (str_starts_with($filePath, 'http://') || str_starts_with($filePath, 'https://')) {
+            return $filePath;
+        }
+
+        return Config::baseUrl('assets/images/uploads/' . trim($subfolder, '/') . '/' . ltrim($filePath, '/'));
+    }
+
+    /**
+     * Dapatkan URL publik dokumen bukti (Mendukung link Google Drive dan penyimpanan lokal)
+     */
+    public static function getDocumentUrl(?string $filePath): string {
+        if (empty($filePath)) {
+            return '#';
+        }
+
+        if (str_starts_with($filePath, 'http://') || str_starts_with($filePath, 'https://')) {
+            return $filePath;
+        }
+
+        return Config::baseUrl('assets/images/uploads/dokumen/' . ltrim($filePath, '/'));
+    }
 }

@@ -6,7 +6,7 @@ require_once __DIR__ . '/../layouts/header.php';
 
 <div style="margin-bottom: 12px; display:flex; justify-content:space-between; align-items:center;">
     <h2 style="font-size: 1.4rem; font-weight: 700;">Presensi Keluar</h2>
-    <a href="<?= Config::baseUrl('dashboard') ?>" class="btn btn-secondary btn-sm">← Kembali</a>
+    <a href="<?= Config::baseUrl('dashboard') ?>" class="btn btn-secondary btn-sm" id="btn-kembali-presensi">← Kembali</a>
 </div>
 
 <div id="alert-box" style="display:none;" class="alert"></div>
@@ -57,8 +57,86 @@ require_once __DIR__ . '/../layouts/header.php';
     </div>
 </div>
 
+<!-- Modal Konfirmasi Presensi Keluar (Review Foto, Lokasi & Jam Pulang) -->
+<div id="modalKonfirmasiKeluar" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalKonfirmasiKeluarTitle">
+    <div class="modal-card presensi-modal-card">
+        <div class="modal-header" style="background: var(--bg-subtle); padding: 16px 20px; border-bottom: 1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="width:36px; height:36px; border-radius:var(--radius-sm); background:rgba(239, 68, 68, 0.12); color:var(--danger); display:flex; align-items:center; justify-content:center;">
+                    <?= Icon::get('camera', 18) ?>
+                </div>
+                <div>
+                    <h3 id="modalKonfirmasiKeluarTitle" style="font-size:1.1rem; font-weight:700; color:var(--text-main); margin:0;">Konfirmasi Presensi Pulang</h3>
+                    <span style="font-size:0.75rem; color:var(--text-muted);">Periksa foto dan jam pulang Anda sebelum mengakhiri kerja</span>
+                </div>
+            </div>
+            <button type="button" class="modal-close-btn" id="btn-batal-modal-keluar-x" aria-label="Tutup Modal" style="background:none; border:none; color:var(--text-muted); cursor:pointer;">
+                <?= Icon::get('x', 18) ?>
+            </button>
+        </div>
+
+        <div class="modal-body" style="padding: 18px 20px;">
+            <!-- Preview Foto Hasil Jepretan -->
+            <div class="snapshot-preview-box">
+                <img id="preview-snapshot-keluar-img" class="snapshot-preview-img" src="" alt="Preview Selfie Pulang">
+                <div class="snapshot-timestamp-pill" id="modal-time-stamp-keluar">
+                    --:--:--
+                </div>
+            </div>
+
+            <!-- Warning Early Departure (Jika Pulang Sebelum Jam Standar) -->
+            <div id="modal-early-warning" style="display:none; padding:10px 12px; font-size:0.82rem; margin-bottom:12px; border-radius:var(--radius-sm); border:1px solid #fed7aa; background:#fff7ed; color:#9a3412;">
+                <div style="font-weight:700; display:flex; align-items:center; gap:6px; margin-bottom:2px;">
+                    ⚠️ Perhatian: Pulang Lebih Awal
+                </div>
+                <span>Jam pulang standar kantor adalah pukul <strong><?= substr($lokasi['jam_pulang'] ?? '17:00:00', 0, 5) ?> WIB</strong>. Presensi Anda akan tercatat pulang lebih awal.</span>
+            </div>
+
+            <!-- Ringkasan Info Presensi -->
+            <div class="presensi-summary-box">
+                <div class="presensi-summary-row">
+                    <span style="color:var(--text-muted);">Pegawai:</span>
+                    <strong style="color:var(--text-main);"><?= htmlspecialchars($currentUser['nama'] ?? 'Pegawai') ?></strong>
+                </div>
+                <div class="presensi-summary-row">
+                    <span style="color:var(--text-muted);">Titik Kantor:</span>
+                    <strong style="color:var(--text-main);"><?= htmlspecialchars($lokasi['nama_lokasi'] ?? 'Kantor') ?></strong>
+                </div>
+                <div class="presensi-summary-row">
+                    <span style="color:var(--text-muted);">Jam Masuk:</span>
+                    <span style="color:var(--text-main); font-weight:600;"><?= !empty($presensiHariIni['jam_masuk']) ? substr($presensiHariIni['jam_masuk'], 0, 5) . ' WIB' : '-' ?></span>
+                </div>
+                <div class="presensi-summary-row">
+                    <span style="color:var(--text-muted);">Estimasi Durasi Kerja:</span>
+                    <strong id="modal-durasi-kerja" style="color:var(--primary);">-</strong>
+                </div>
+                <div class="presensi-summary-row">
+                    <span style="color:var(--text-muted);">Jarak dari Kantor:</span>
+                    <span id="modal-distance-text-keluar" class="badge badge-success" style="font-size:0.75rem; padding: 2px 8px;">
+                        - meter (Dalam Radius)
+                    </span>
+                </div>
+            </div>
+
+            <p style="font-size:0.78rem; color:var(--text-muted); margin: 12px 0 0 0; text-align: center; line-height: 1.4;">
+                💡 <em>Pastikan foto selfie terlihat jelas sebelum mengonfirmasi presensi kepulangan.</em>
+            </p>
+        </div>
+
+        <div class="modal-footer" style="padding: 14px 20px; background: var(--bg-subtle); border-top: 1px solid var(--border-color); display:flex; gap:10px; justify-content:flex-end;">
+            <button type="button" class="btn btn-secondary" id="btn-retake-foto-keluar" style="display:inline-flex; align-items:center; gap:6px;">
+                <?= Icon::get('refresh', 14) ?> <span>Ambil Ulang Foto</span>
+            </button>
+            <button type="button" class="btn btn-danger" id="btn-confirm-send-keluar" style="display:inline-flex; align-items:center; gap:6px;">
+                <?= Icon::get('check', 16) ?> <span id="btn-confirm-send-keluar-text">Ya, Presensi Pulang</span>
+            </button>
+        </div>
+    </div>
+</div>
+
 <script>
-document.addEventListener('DOMContentLoaded', () => {
+(() => {
+    function runPresensiKeluar() {
     const video = document.getElementById('webcam-video');
     const canvas = document.getElementById('snapshot-canvas');
     const submitBtn = document.getElementById('btn-submit-keluar');
@@ -78,6 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let officeCircle = null;
     let cameraStream = null;
     let currentFacingMode = 'user'; // 'user' (depan/selfie) atau 'environment' (belakang)
+    let currentCalculatedDistance = null;
 
     // Device States Coordinator (Single Source of Truth)
     const gpsState = {
@@ -245,6 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update Distance Badge & Peta
         if (gpsState.status === 'ready' && gpsState.lat !== null && gpsState.lng !== null) {
             dist = calcDistance(gpsState.lat, gpsState.lng, officeLat, officeLng);
+            currentCalculatedDistance = dist;
             inRange = (dist <= officeRadius);
 
             if (userMarker) map.removeLayer(userMarker);
@@ -327,6 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
             video.srcObject = cameraStream;
+            window.SGMCamera?.register(cameraStream);
             cameraState.status = 'ready';
             cameraState.errName = null;
 
@@ -339,6 +420,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
                     video.srcObject = cameraStream;
+                    window.SGMCamera?.register(cameraStream);
                     cameraState.status = 'ready';
                     cameraState.errName = null;
                     await video.play().catch(() => {});
@@ -360,11 +442,42 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function stopCamera() {
         if (cameraStream) {
-            cameraStream.getTracks().forEach(track => {
-                track.stop();
-            });
+            try {
+                cameraStream.getTracks().forEach(track => {
+                    track.enabled = false;
+                    track.stop();
+                });
+            } catch (e) {}
+            window.SGMCamera?.unregister(cameraStream);
             cameraStream = null;
         }
+
+        if (video) {
+            try {
+                if (video.srcObject) {
+                    const stream = video.srcObject;
+                    if (stream && stream.getTracks) {
+                        stream.getTracks().forEach(track => {
+                            track.enabled = false;
+                            track.stop();
+                        });
+                    }
+                }
+                video.pause();
+                video.srcObject = null;
+            } catch (e) {}
+        }
+    }
+
+    const btnKembali = document.getElementById('btn-kembali-presensi');
+    if (btnKembali) {
+        btnKembali.addEventListener('click', () => {
+            stopCamera();
+            if (map) {
+                try { map.remove(); } catch(e) {}
+                map = null;
+            }
+        });
     }
 
     btnSwitchCamera.addEventListener('click', async () => {
@@ -374,7 +487,20 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => btnSwitchCamera.classList.remove('switching'), 400);
     });
 
-    window.addEventListener('beforeunload', stopCamera);
+    const handleTeardownPresensi = () => {
+        stopCamera();
+        if (map) {
+            try { map.remove(); } catch(e) {}
+            map = null;
+        }
+    };
+
+    window.addEventListener('beforeunload', handleTeardownPresensi);
+    window.addEventListener('pagehide', handleTeardownPresensi);
+    window.addEventListener('popstate', handleTeardownPresensi);
+    document.addEventListener('turbo:before-visit', handleTeardownPresensi);
+    document.addEventListener('turbo:before-cache', handleTeardownPresensi);
+    document.addEventListener('turbo:before-render', handleTeardownPresensi);
 
     // 3. Inisialisasi Peta Leaflet
     function initMap() {
@@ -462,9 +588,94 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     let isSubmitting = false;
+    let currentPhotoBase64 = null;
 
-    // 6. Handle Submit Absen Keluar (Ringan & Cepat Terkompresi)
-    submitBtn.addEventListener('click', async () => {
+    // Modal Konfirmasi Elements
+    const modalKonfirm = document.getElementById('modalKonfirmasiKeluar');
+    const previewImg = document.getElementById('preview-snapshot-keluar-img');
+    const modalTimeStamp = document.getElementById('modal-time-stamp-keluar');
+    const modalEarlyWarning = document.getElementById('modal-early-warning');
+    const modalDurasiKerja = document.getElementById('modal-durasi-kerja');
+    const modalDistanceText = document.getElementById('modal-distance-text-keluar');
+    const btnRetake = document.getElementById('btn-retake-foto-keluar');
+    const btnCloseModal = document.getElementById('btn-batal-modal-keluar-x');
+    const btnConfirmSend = document.getElementById('btn-confirm-send-keluar');
+    const btnConfirmSendText = document.getElementById('btn-confirm-send-keluar-text');
+
+    const jamMasukStr = <?= json_encode($presensiHariIni['jam_masuk'] ?? '') ?>;
+    const jamPulangStandar = <?= json_encode($lokasi['jam_pulang'] ?? '17:00:00') ?>;
+
+    function openConfirmModal(photoBase64) {
+        currentPhotoBase64 = photoBase64;
+        previewImg.src = photoBase64;
+
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('id-ID', { hour12: false });
+        modalTimeStamp.textContent = timeStr + ' WIB';
+
+        // Cek apakah pulang lebih awal dari jam pulang standar
+        if (jamPulangStandar) {
+            const curHHMM = timeStr.substring(0, 5);
+            const stdHHMM = jamPulangStandar.substring(0, 5);
+            if (curHHMM < stdHHMM) {
+                modalEarlyWarning.style.display = 'block';
+            } else {
+                modalEarlyWarning.style.display = 'none';
+            }
+        }
+
+        // Estimasi durasi kerja hari ini
+        if (jamMasukStr) {
+            const parts = jamMasukStr.split(':');
+            if (parts.length >= 2) {
+                const start = new Date(now);
+                start.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), parseInt(parts[2] || '0', 10), 0);
+                const diffMs = now.getTime() - start.getTime();
+                if (diffMs > 0) {
+                    const totalMin = Math.floor(diffMs / 60000);
+                    const h = Math.floor(totalMin / 60);
+                    const m = totalMin % 60;
+                    modalDurasiKerja.textContent = `${h} jam ${m} menit`;
+                } else {
+                    modalDurasiKerja.textContent = '< 1 menit';
+                }
+            }
+        } else {
+            modalDurasiKerja.textContent = '-';
+        }
+
+        // Info jarak
+        if (currentCalculatedDistance !== null) {
+            modalDistanceText.textContent = `${currentCalculatedDistance}m (Dalam Radius Kantor)`;
+        } else {
+            modalDistanceText.textContent = 'Dalam Radius Kantor';
+        }
+
+        modalKonfirm.classList.add('show');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeConfirmModal() {
+        modalKonfirm.classList.remove('show');
+        document.body.style.overflow = '';
+        currentPhotoBase64 = null;
+    }
+
+    if (btnRetake) btnRetake.addEventListener('click', closeConfirmModal);
+    if (btnCloseModal) btnCloseModal.addEventListener('click', closeConfirmModal);
+
+    modalKonfirm.addEventListener('click', (e) => {
+        if (e.target === modalKonfirm && !isSubmitting) closeConfirmModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modalKonfirm.classList.contains('show') && !isSubmitting) {
+            closeConfirmModal();
+        }
+    });
+
+    // 6. Handle Klik "Presensi Keluar": Buka Modal Konfirmasi (Client-Side, Cepat & Aman)
+    submitBtn.addEventListener('click', () => {
         if (isSubmitting || submitBtn.disabled) return;
         if (!video.videoWidth) {
             showAlert('danger', 'Kamera belum siap, tunggu beberapa detik.');
@@ -475,10 +686,6 @@ document.addEventListener('DOMContentLoaded', () => {
             showAlert('danger', 'Lokasi GPS belum terdeteksi. Silakan aktifkan GPS.');
             return;
         }
-
-        isSubmitting = true;
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Memproses Presensi Keluar...';
 
         // Downscale canvas secara proporsional ke maksimal 640px agar encoding instan & hemat bandwidth
         const maxDimension = 640;
@@ -511,8 +718,21 @@ document.addEventListener('DOMContentLoaded', () => {
         // Kompresi ke JPEG dengan kualitas 0.70 (~35KB - 50KB, hemat 95% bandwidth)
         const photoBase64 = canvas.toDataURL('image/jpeg', 0.70);
 
+        // Tampilkan foto di Modal Konfirmasi untuk di-review oleh pegawai
+        openConfirmModal(photoBase64);
+    });
+
+    // 7. Handle Konfirmasi Final: Eksekusi Kirim Presensi ke Server
+    btnConfirmSend.addEventListener('click', async () => {
+        if (isSubmitting || !currentPhotoBase64) return;
+
+        isSubmitting = true;
+        btnConfirmSend.disabled = true;
+        btnRetake.disabled = true;
+        btnConfirmSendText.textContent = 'Memproses Presensi Keluar...';
+
         const formData = new FormData();
-        formData.append('image', photoBase64);
+        formData.append('image', currentPhotoBase64);
         formData.append('latitude', gpsState.lat);
         formData.append('longitude', gpsState.lng);
 
@@ -524,31 +744,45 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await resp.json();
 
             if (result.status === 'success') {
+                closeConfirmModal();
                 stopCamera(); // Segera matikan stream kamera ponsel
                 showAlert('success', result.message);
                 setTimeout(() => {
-                    window.location.href = result.redirect;
+                    if (window.Turbo) {
+                        Turbo.visit(result.redirect);
+                    } else {
+                        window.location.href = result.redirect;
+                    }
                 }, 1200);
             } else {
                 if (result.session_expired) {
+                    closeConfirmModal();
                     stopCamera();
                     showAlert('danger', result.message);
                     setTimeout(() => {
-                        window.location.href = result.redirect || '<?= Config::baseUrl("login") ?>';
+                        if (window.Turbo) {
+                            Turbo.visit(result.redirect || '<?= Config::baseUrl("login") ?>');
+                        } else {
+                            window.location.href = result.redirect || '<?= Config::baseUrl("login") ?>';
+                        }
                     }, 2000);
                     return;
                 }
+                closeConfirmModal();
                 showAlert('danger', result.message);
                 isSubmitting = false;
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Presensi Keluar';
+                btnConfirmSend.disabled = false;
+                btnRetake.disabled = false;
+                btnConfirmSendText.textContent = 'Ya, Presensi Pulang';
             }
         } catch (e) {
             console.error(e);
+            closeConfirmModal();
             showAlert('danger', 'Terjadi kesalahan komunikasi dengan server.');
             isSubmitting = false;
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Presensi Keluar';
+            btnConfirmSend.disabled = false;
+            btnRetake.disabled = false;
+            btnConfirmSendText.textContent = 'Ya, Presensi Pulang';
         }
     });
 
@@ -561,7 +795,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initCamera();
     initGeolocation();
-});
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', runPresensiKeluar);
+    } else {
+        runPresensiKeluar();
+    }
+})();
 </script>
 
 <?php require_once __DIR__ . '/../layouts/footer.php'; ?>

@@ -106,64 +106,101 @@ require_once __DIR__ . '/../layouts/header.php';
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    const latInput = document.getElementById('latitude');
-    const lngInput = document.getElementById('longitude');
-    const radiusInput = document.getElementById('radius');
+(() => {
+    let map = null;
 
-    let initialLat = parseFloat(latInput.value) || -6.2087634;
-    let initialLng = parseFloat(lngInput.value) || 106.845599;
-    let initialRadius = parseInt(radiusInput.value) || 500;
-
-    const map = L.map('picker-map').setView([initialLat, initialLng], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap'
-    }).addTo(map);
-
-    let marker = L.marker([initialLat, initialLng], { draggable: true }).addTo(map);
-
-    let circle = L.circle([initialLat, initialLng], {
-        radius: Math.max(25, initialRadius),
-        color: '#2563eb',
-        fillColor: '#3b82f6',
-        fillOpacity: 0.18,
-        weight: 2
-    }).addTo(map);
-
-    const updateCoords = (lat, lng) => {
-        latInput.value = lat.toFixed(8);
-        lngInput.value = lng.toFixed(8);
-        circle.setLatLng([lat, lng]);
-    };
-
-    map.on('click', (e) => {
-        marker.setLatLng(e.latlng);
-        updateCoords(e.latlng.lat, e.latlng.lng);
-    });
-
-    marker.on('dragend', (e) => {
-        const pos = e.target.getLatLng();
-        updateCoords(pos.lat, pos.lng);
-    });
-
-    radiusInput.addEventListener('input', () => {
-        const r = parseInt(radiusInput.value) || 25;
-        circle.setRadius(Math.max(25, r));
-    });
-
-    const syncMapFromInputs = () => {
-        const lat = parseFloat(latInput.value);
-        const lng = parseFloat(lngInput.value);
-        if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-            marker.setLatLng([lat, lng]);
-            circle.setLatLng([lat, lng]);
-            map.panTo([lat, lng]);
+    function cleanupMap() {
+        if (map) {
+            try { map.remove(); } catch(e) {}
+            map = null;
         }
-    };
+        const container = document.getElementById('picker-map');
+        if (container && container._leaflet_id) {
+            delete container._leaflet_id;
+            container.innerHTML = '';
+        }
+    }
 
-    latInput.addEventListener('change', syncMapFromInputs);
-    lngInput.addEventListener('change', syncMapFromInputs);
-});
+    function initLokasiPicker() {
+        const container = document.getElementById('picker-map');
+        if (!container) return;
+
+        cleanupMap();
+
+        const latInput = document.getElementById('latitude');
+        const lngInput = document.getElementById('longitude');
+        const radiusInput = document.getElementById('radius');
+        if (!latInput || !lngInput || !radiusInput) return;
+
+        let initialLat = parseFloat(latInput.value) || -6.2087634;
+        let initialLng = parseFloat(lngInput.value) || 106.845599;
+        let initialRadius = parseInt(radiusInput.value) || 500;
+
+        try {
+            map = L.map('picker-map').setView([initialLat, initialLng], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(map);
+        } catch(e) {
+            console.warn('Map initialization:', e);
+            return;
+        }
+
+        let marker = L.marker([initialLat, initialLng], { draggable: true }).addTo(map);
+
+        let circle = L.circle([initialLat, initialLng], {
+            radius: Math.max(25, initialRadius),
+            color: '#2563eb',
+            fillColor: '#3b82f6',
+            fillOpacity: 0.18,
+            weight: 2
+        }).addTo(map);
+
+        const updateCoords = (lat, lng) => {
+            latInput.value = lat.toFixed(8);
+            lngInput.value = lng.toFixed(8);
+            circle.setLatLng([lat, lng]);
+        };
+
+        map.on('click', (e) => {
+            marker.setLatLng(e.latlng);
+            updateCoords(e.latlng.lat, e.latlng.lng);
+        });
+
+        marker.on('dragend', (e) => {
+            const pos = e.target.getLatLng();
+            updateCoords(pos.lat, pos.lng);
+        });
+
+        radiusInput.addEventListener('input', () => {
+            const r = parseInt(radiusInput.value) || 25;
+            circle.setRadius(Math.max(25, r));
+        });
+
+        const syncMapFromInputs = () => {
+            const lat = parseFloat(latInput.value);
+            const lng = parseFloat(lngInput.value);
+            if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                marker.setLatLng([lat, lng]);
+                circle.setLatLng([lat, lng]);
+                map.panTo([lat, lng]);
+            }
+        };
+
+        latInput.addEventListener('change', syncMapFromInputs);
+        lngInput.addEventListener('change', syncMapFromInputs);
+    }
+
+    document.addEventListener('turbo:before-cache', cleanupMap);
+    document.addEventListener('turbo:before-visit', cleanupMap);
+    window.addEventListener('beforeunload', cleanupMap);
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initLokasiPicker);
+    } else {
+        initLokasiPicker();
+    }
+})();
 </script>
 
 <?php require_once __DIR__ . '/../layouts/footer.php'; ?>

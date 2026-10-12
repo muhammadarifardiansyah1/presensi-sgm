@@ -111,10 +111,15 @@ class Lokasi {
         $stmtPresensi->execute([$id]);
         $presensiCount = (int)$stmtPresensi->fetchColumn();
 
+        $stmtLembur = $this->db->prepare("SELECT COUNT(*) FROM `penugasan_lembur` WHERE `lokasi_id` = ?");
+        $stmtLembur->execute([$id]);
+        $lemburCount = (int)$stmtLembur->fetchColumn();
+
         return [
-            'is_used'        => ($userCount > 0 || $presensiCount > 0),
+            'is_used'        => ($userCount > 0 || $presensiCount > 0 || $lemburCount > 0),
             'user_count'     => $userCount,
-            'presensi_count' => $presensiCount
+            'presensi_count' => $presensiCount,
+            'lembur_count'   => $lemburCount
         ];
     }
 
@@ -122,4 +127,24 @@ class Lokasi {
         $stmt = $this->db->prepare("DELETE FROM `lokasi_presensi` WHERE `id` = ?");
         return $stmt->execute([$id]);
     }
+
+    /**
+     * Mengambil statistik kehadiran pegawai hari ini per lokasi penugasan
+     */
+    public function getStatistikHadirHariIni(string $tanggal): array {
+        $stmt = $this->db->prepare("
+            SELECT 
+                l.id, l.nama_lokasi, l.tipe_lokasi,
+                COUNT(DISTINCT u.id) AS total_pegawai,
+                COUNT(DISTINCT p.user_id) AS total_hadir
+            FROM `lokasi_presensi` l
+            LEFT JOIN `users` u ON u.lokasi_id = l.id AND u.status = 'aktif' AND u.role = 'pegawai'
+            LEFT JOIN `presensi` p ON p.lokasi_id = l.id AND p.tanggal = ? AND p.jam_masuk IS NOT NULL
+            GROUP BY l.id, l.nama_lokasi, l.tipe_lokasi
+            ORDER BY total_hadir DESC, l.nama_lokasi ASC
+        ");
+        $stmt->execute([$tanggal]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 }
+

@@ -20,6 +20,13 @@ $activePage = $activePage ?? 'dashboard';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars($pageTitle ?? Config::APP_TITLE) ?></title>
 
+    <!-- Favicon & App Icons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="<?= Config::baseUrl('assets/images/favicon-32x32.png') ?>?v=<?= filemtime(__DIR__ . '/../../../assets/images/favicon-32x32.png') ?>">
+    <link rel="icon" type="image/png" sizes="16x16" href="<?= Config::baseUrl('assets/images/favicon-16x16.png') ?>?v=<?= filemtime(__DIR__ . '/../../../assets/images/favicon-16x16.png') ?>">
+    <link rel="apple-touch-icon" sizes="180x180" href="<?= Config::baseUrl('assets/images/apple-touch-icon.png') ?>?v=<?= filemtime(__DIR__ . '/../../../assets/images/apple-touch-icon.png') ?>">
+    <link rel="icon" type="image/png" sizes="192x192" href="<?= Config::baseUrl('assets/images/favicon-192x192.png') ?>?v=<?= filemtime(__DIR__ . '/../../../assets/images/favicon-192x192.png') ?>">
+    <link rel="shortcut icon" href="<?= Config::baseUrl('favicon.ico') ?>?v=<?= filemtime(__DIR__ . '/../../../favicon.ico') ?>">
+
     <!-- Anti-FOUC Early Theme Initializer (Mencegah Glitch Layar Putih saat Navigasi Dark Mode) -->
     <script>
         (function() {
@@ -45,7 +52,16 @@ $activePage = $activePage ?? 'dashboard';
     <link rel="stylesheet" href="<?= Config::baseUrl('assets/vendor/leaflet/leaflet.css') ?>"/>
     
     <!-- Custom Style with Auto Cache-Busting -->
-    <link rel="stylesheet" href="<?= Config::baseUrl('assets/css/style.css') ?>?v=<?= filemtime(__DIR__ . '/../../../assets/css/style.css') ?>">
+    <link rel="stylesheet" href="<?= Config::baseUrl('assets/css/style.css') ?>?v=<?= filemtime(__DIR__ . '/../../../assets/css/style.css') ?>" data-turbo-track="reload">
+
+    <!-- Leaflet JS (Local Asset) -->
+    <script src="<?= Config::baseUrl('assets/vendor/leaflet/leaflet.js') ?>" data-turbo-track="reload"></script>
+
+    <!-- Hotwire Turbo Drive (Seamless SPA Feel) -->
+    <script src="<?= Config::baseUrl('assets/vendor/turbo/turbo.umd.js') ?>?v=<?= filemtime(__DIR__ . '/../../../assets/vendor/turbo/turbo.umd.js') ?>" data-turbo-track="reload"></script>
+
+    <!-- Main Application Scripts -->
+    <script src="<?= Config::baseUrl('assets/js/app.js') ?>?v=<?= filemtime(__DIR__ . '/../../../assets/js/app.js') ?>" data-turbo-track="reload"></script>
 </head>
 <body>
 
@@ -53,7 +69,7 @@ $activePage = $activePage ?? 'dashboard';
     <div class="header-top">
         <div class="brand-badge">
             <button class="mobile-nav-toggle" id="mobile-nav-toggle" aria-label="Toggle Navigation"><?= Icon::get('menu', 20) ?></button>
-            <a href="<?= Config::baseUrl('dashboard') ?>" style="display:flex;align-items:center;gap:10px;">
+            <a href="<?= Config::baseUrl('dashboard') ?>" class="brand-link">
                 <div class="brand-logo-wrapper">
                     <img src="<?= Config::baseUrl('assets/images/logo.png') ?>?v=<?= filemtime(__DIR__ . '/../../../assets/images/logo.png') ?>" alt="Logo <?= Config::APP_NAME ?>" class="brand-logo-img">
                 </div>
@@ -118,11 +134,13 @@ $activePage = $activePage ?? 'dashboard';
                             </div>
                         <?php endif; ?>
                     </div>
-                    <div class="dropdown-panel-footer">
+                    <div class="dropdown-panel-footer" style="display:flex; justify-content:space-between; align-items:center; padding: 10px 16px; background: var(--bg-hover);">
                         <?php if (($currentUser['role'] ?? '') === 'admin'): ?>
-                            <a href="<?= Config::baseUrl('ketidakhadiran') ?>" class="dropdown-footer-link">Tinjau Pengajuan Ketidakhadiran →</a>
+                            <a href="<?= Config::baseUrl('notifikasi') ?>" class="dropdown-footer-link" style="font-weight: 700; color: var(--accent-blue);">Lihat Semua Notifikasi →</a>
+                            <a href="<?= Config::baseUrl('ketidakhadiran') ?>" class="dropdown-footer-link" style="font-size: 0.78rem; color: var(--text-muted);">Kelola Izin</a>
                         <?php else: ?>
-                            <a href="<?= Config::baseUrl('ketidakhadiran') ?>" class="dropdown-footer-link">Lihat Riwayat Izin & Cuti →</a>
+                            <a href="<?= Config::baseUrl('riwayat') ?>" class="dropdown-footer-link" style="font-weight: 700; color: var(--accent-blue);">Lihat Semua Notifikasi →</a>
+                            <a href="<?= Config::baseUrl('ketidakhadiran') ?>" class="dropdown-footer-link" style="font-size: 0.78rem; color: var(--text-muted);">Status Izin</a>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -185,7 +203,7 @@ $activePage = $activePage ?? 'dashboard';
                     </div>
                     <div class="dropdown-divider"></div>
                     <div class="dropdown-panel-footer">
-                        <a href="<?= Config::baseUrl('logout') ?>" class="dropdown-logout-link" onclick="return confirm('Apakah Anda yakin ingin keluar?');">
+                        <a href="<?= Config::baseUrl('logout') ?>" data-turbo="false" class="dropdown-logout-link" data-confirm="Apakah Anda yakin ingin mengakhiri sesi kerja dan keluar dari sistem?" data-confirm-title="Keluar dari Sistem" data-confirm-type="logout" data-confirm-btn="Ya, Keluar">
                             <?= Icon::get('logout', 16) ?> Keluar dari Sistem
                         </a>
                     </div>
@@ -246,6 +264,13 @@ $activePage = $activePage ?? 'dashboard';
             </li>
 
             <?php if (($currentUser['role'] ?? '') === 'admin'): ?>
+                <li class="nav-item <?= ($activePage === 'lembur') ? 'active' : '' ?>">
+                    <a href="<?= Config::baseUrl('lembur') ?>" class="nav-link">
+                        <?= Icon::get('clock', 18) ?>
+                        <span>Penugasan Lembur</span>
+                    </a>
+                </li>
+
                 <li class="nav-item <?= ($activePage === 'gaji') ? 'active' : '' ?>">
                     <a href="<?= Config::baseUrl('gaji') ?>" class="nav-link">
                         <?= Icon::get('wallet', 18) ?>
@@ -255,7 +280,7 @@ $activePage = $activePage ?? 'dashboard';
             <?php endif; ?>
 
             <li class="nav-item">
-                <a href="<?= Config::baseUrl('logout') ?>" class="nav-link" onclick="return confirm('Apakah Anda yakin ingin keluar?');">
+                <a href="<?= Config::baseUrl('logout') ?>" data-turbo="false" class="nav-link" data-confirm="Apakah Anda yakin ingin mengakhiri sesi kerja dan keluar dari sistem?" data-confirm-title="Keluar dari Sistem" data-confirm-type="logout" data-confirm-btn="Ya, Keluar">
                     <?= Icon::get('logout', 18) ?>
                     <span>Logout</span>
                 </a>

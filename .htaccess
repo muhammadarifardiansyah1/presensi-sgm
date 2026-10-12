@@ -1,19 +1,26 @@
+# Nonaktifkan penjelajahan direktori secara global (Directory Browsing)
+Options -Indexes
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # Blokir akses langsung ke folder internal /app
-    RewriteRule ^app/ - [F,L]
+    # 1. Blokir akses ke file & folder tersembunyi (dotfiles & dotfolders seperti .git, .env, .agents)
+    #    Kecualikan .well-known untuk verifikasi SSL Let's Encrypt
+    RewriteRule ^\.(?!well-known/) - [F,L]
 
-    # Jangan rewrite jika file atau direktori fisik ada
+    # 2. Blokir akses langsung ke folder internal non-publik
+    RewriteRule ^(app|scripts|database|docs_migrasi|scratch)/ - [F,L]
+
+    # 3. Jangan rewrite jika file atau direktori fisik ada
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
 
-    # Rewrite seluruh rute ke index.php (kompatibel subfolder maupun root domain)
+    # 4. Rewrite seluruh rute ke index.php (kompatibel subfolder maupun root domain)
     RewriteRule ^(.*)$ index.php?url=$1 [QSA,L]
 </IfModule>
 
-# Keamanan: Blokir akses ke file konfigurasi dan berkas sensitif
-<FilesMatch "(?i)\.(ini|log|env|sql|json|lock|git)$">
+# Keamanan: Blokir akses ke file konfigurasi, arsip, spreadsheet, script CLI & dokumen sensitif
+<FilesMatch "(?i)^(migrate\.php|.*\.xlsx|.*\.(ini|log|env|sql|json|lock|git|md|yml|yaml|bak|backup))$">
     <IfModule mod_authz_core.c>
         Require all denied
     </IfModule>

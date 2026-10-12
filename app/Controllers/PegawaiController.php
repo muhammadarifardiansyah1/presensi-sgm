@@ -333,6 +333,10 @@ class PegawaiController {
         }
         $defaultLokasiId = !empty($lokasiList[0]['id']) ? (int)$lokasiList[0]['id'] : null;
 
+        // Smart Jabatan Resolver Cache during import session
+        $resolvedJabatanCache = [];
+        $newJabatansRegistered = [];
+
         $successCount = 0;
         $skippedCount = 0;
         $errors = [];
@@ -362,9 +366,18 @@ class PegawaiController {
             // Automatic sequential NIK generation (Never require manual NIK from Excel)
             $nik = $this->userModel->generateNextNik($role);
 
-            // Jabatan mapping
-            $jabatanRaw = strtolower(trim($row['jabatan'] ?? ''));
-            $jabatan = $jabatanMap[$jabatanRaw] ?? (!empty($row['jabatan']) ? trim($row['jabatan']) : 'Staff Operasional');
+            // Smart Jabatan Resolution (Fuzzy match, alias map, & auto-register to Master Data + Pengaturan Gaji)
+            $jabatanInput = trim($row['jabatan'] ?? '');
+            $cacheKey = mb_strtolower($jabatanInput);
+
+            if (!isset($resolvedJabatanCache[$cacheKey])) {
+                $resJab = $this->jabatanModel->resolveOrRegisterJabatan($jabatanInput);
+                $resolvedJabatanCache[$cacheKey] = $resJab['nama_jabatan'];
+                if (!empty($resJab['is_new'])) {
+                    $newJabatansRegistered[] = $resJab['nama_jabatan'];
+                }
+            }
+            $jabatan = $resolvedJabatanCache[$cacheKey];
 
             // Lokasi mapping
             $lokasiRaw = strtolower(trim($row['lokasi_presensi'] ?? ''));
@@ -406,9 +419,10 @@ class PegawaiController {
         }
 
         $_SESSION['import_result'] = [
-            'success' => $successCount,
-            'skipped' => $skippedCount,
-            'errors'  => $errors
+            'success'      => $successCount,
+            'skipped'      => $skippedCount,
+            'errors'       => $errors,
+            'new_jabatans' => array_values(array_unique($newJabatansRegistered))
         ];
 
         header("Location: " . Config::baseUrl('pegawai?msg=imported'));

@@ -8,6 +8,8 @@ require_once __DIR__ . '/../Config/Config.php';
 require_once __DIR__ . '/AuthController.php';
 require_once __DIR__ . '/../Models/Ketidakhadiran.php';
 require_once __DIR__ . '/../Helpers/ImageHelper.php';
+require_once __DIR__ . '/../Helpers/RateLimiter.php';
+require_once __DIR__ . '/../Helpers/GoogleSyncHelper.php';
 
 class KetidakhadiranController {
     private Ketidakhadiran $ketidakhadiranModel;
@@ -34,6 +36,19 @@ class KetidakhadiranController {
         $error = '';
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            // Proteksi Rate Limiting & Anti-Spam Pengajuan (Max 4 per 60 detik per user)
+            $userId = (int)$currentUser['id'];
+            $rateKey = 'ketidakhadiran:user:' . $userId;
+            if (RateLimiter::tooManyAttempts($rateKey, 4)) {
+                $seconds = RateLimiter::availableIn($rateKey);
+                http_response_code(429);
+                header('Retry-After: ' . $seconds);
+                $error = "Terlalu banyak pengajuan ketidakhadiran dalam waktu singkat. Mohon tunggu {$seconds} detik sebelum mencoba kembali.";
+                require_once __DIR__ . '/../Views/ketidakhadiran/form.php';
+                return;
+            }
+            RateLimiter::hit($rateKey, 60);
+
             $kategori       = $_POST['kategori'] ?? 'izin';
             $tanggalMulai   = $_POST['tanggal_mulai'] ?? '';
             $tanggalSelesai = $_POST['tanggal_selesai'] ?? '';
@@ -113,6 +128,24 @@ class KetidakhadiranController {
 
                 // Simpan ke database jika tidak ada error
                 if (empty($error)) {
+                    // Upload ke Google Drive jika ada dokumen dan webhook aktif
+                    if (!empty($dokumenBukti) && GoogleSyncHelper::isConfigured()) {
+                        $fullDocPath = $uploadDir . $dokumenBukti;
+                        if (file_exists($fullDocPath)) {
+                            $driveRes = GoogleSyncHelper::syncDocument($fullDocPath, $dokumenBukti, [
+                                'nama' => $currentUser['nama'] ?? '-',
+                                'nik' => $currentUser['nik'] ?? '-',
+                                'kategori' => $kategori,
+                                'tanggal_mulai' => $tanggalMulai,
+                                'tanggal_selesai' => $tanggalSelesai,
+                                'keterangan' => $keterangan
+                            ]);
+                            if (!empty($driveRes['drive_url'])) {
+                                $dokumenBukti = $driveRes['drive_url'];
+                            }
+                        }
+                    }
+
                     $sukses = $this->ketidakhadiranModel->create([
                         'user_id'         => $currentUser['id'],
                         'kategori'        => $kategori,
@@ -137,17 +170,117 @@ class KetidakhadiranController {
 
     public function approve(int $id): void {
         AuthController::checkAdmin();
-        $catatan = $_POST['catatan'] ?? 'Disetujui oleh Administrator';
+        if ($id <= 0) {
+            header("Location: " . Config::baseUrl('ketidakhadiran'), true, 303);
+            exit;
+        }
+        $catatan = trim($_POST['catatan'] ?? '') ?: 'Disetujui oleh Administrator';
         $this->ketidakhadiranModel->updateStatus($id, 'disetujui', $catatan);
-        header("Location: " . Config::baseUrl('ketidakhadiran?msg=approved'));
+        header("Location: " . Config::baseUrl('ketidakhadiran?msg=approved'), true, 303);
         exit;
     }
 
     public function reject(int $id): void {
         AuthController::checkAdmin();
-        $catatan = $_POST['catatan'] ?? 'Pengajuan ditolak';
+        if ($id <= 0) {
+            header("Location: " . Config::baseUrl('ketidakhadiran'), true, 303);
+            exit;
+        }
+        $catatan = trim($_POST['catatan'] ?? '') ?: 'Pengajuan ditolak oleh Administrator';
         $this->ketidakhadiranModel->updateStatus($id, 'ditolak', $catatan);
-        header("Location: " . Config::baseUrl('ketidakhadiran?msg=rejected'));
+        header("Location: " . Config::baseUrl('ketidakhadiran?msg=rejected'), true, 303);
+        exit;
+    }
+
+    public function edit(int $id): void {
+        AuthController::checkAdmin();
+        if ($id <= 0) {
+            header("Location: " . Config::baseUrl('ketidakhadiran?err=invalid_id'), true, 303);
+            exit;
+        }
+
+        $item = $this->ketidakhadiranModel->findById($id);
+        if (!$item) {
+            header("Location: " . Config::baseUrl('ketidakhadiran?err=not_found'), true, 303);
+            exit;
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $kategori       = trim($_POST['kategori'] ?? 'izin');
+            $tanggalMulai   = trim($_POST['tanggal_mulai'] ?? '');
+            $tanggalSelesai = trim($_POST['tanggal_selesai'] ?? '');
+            $keterangan     = trim($_POST['keterangan'] ?? '');
+            $statusApproval = trim($_POST['status_approval'] ?? 'pending');
+            $catatanAdmin   = trim($_POST['catatan_admin'] ?? '');
+
+            if ($tanggalMulai === '' || $tanggalSelesai === '' || $keterangan === '') {
+                header("Location: " . Config::baseUrl('ketidakhadiran?err=empty_fields'), true, 303);
+                exit;
+            }
+
+            if (strtotime($tanggalSelesai) < strtotime($tanggalMulai)) {
+                header("Location: " . Config::baseUrl('ketidakhadiran?err=invalid_date'), true, 303);
+                exit;
+            }
+
+            // Validasi tabrakan tanggal jika status disetujui
+            if ($statusApproval === 'disetujui') {
+                $duplicate = $this->ketidakhadiranModel->checkDuplicate((int)$item['user_id'], $tanggalMulai, $tanggalSelesai, $id);
+                if ($duplicate && $duplicate['status_approval'] === 'disetujui') {
+                    header("Location: " . Config::baseUrl('ketidakhadiran?err=bentrok_disetujui'), true, 303);
+                    exit;
+                }
+            }
+
+            $this->ketidakhadiranModel->update($id, [
+                'kategori'        => $kategori,
+                'tanggal_mulai'   => $tanggalMulai,
+                'tanggal_selesai' => $tanggalSelesai,
+                'keterangan'      => $keterangan,
+                'status_approval' => $statusApproval,
+                'catatan_admin'   => $catatanAdmin
+            ]);
+
+            header("Location: " . Config::baseUrl('ketidakhadiran?msg=updated'), true, 303);
+            exit;
+        }
+
+        header("Location: " . Config::baseUrl('ketidakhadiran'), true, 303);
+        exit;
+    }
+
+    public function hapus(int $id): void {
+        AuthController::checkAdmin();
+        if ($id <= 0) {
+            header("Location: " . Config::baseUrl('ketidakhadiran?err=invalid_id'), true, 303);
+            exit;
+        }
+
+        $sukses = $this->ketidakhadiranModel->delete($id);
+        if ($sukses) {
+            header("Location: " . Config::baseUrl('ketidakhadiran?msg=deleted'), true, 303);
+        } else {
+            header("Location: " . Config::baseUrl('ketidakhadiran?err=delete_failed'), true, 303);
+        }
+        exit;
+    }
+
+    public function exportExcel(): void {
+        AuthController::checkAdmin();
+
+        $statusFilter         = !empty($_GET['status']) ? trim($_GET['status']) : null;
+        $kategoriFilter       = !empty($_GET['kategori']) ? trim($_GET['kategori']) : null;
+        $tanggalMulaiFilter   = !empty($_GET['tanggal_mulai']) ? trim($_GET['tanggal_mulai']) : null;
+        $tanggalSelesaiFilter = !empty($_GET['tanggal_selesai']) ? trim($_GET['tanggal_selesai']) : null;
+
+        $dataIzin = $this->ketidakhadiranModel->getAll($statusFilter, $kategoriFilter, $tanggalMulaiFilter, $tanggalSelesaiFilter);
+
+        $filename = "Rekap_Ketidakhadiran_" . date('Ymd_His') . ".xls";
+        header("Content-Type: application/vnd.ms-excel; charset=utf-8");
+        header("Content-Disposition: attachment; filename=\"$filename\"");
+        header("Cache-Control: max-age=0");
+
+        require_once __DIR__ . '/../Views/ketidakhadiran/export_excel.php';
         exit;
     }
 }

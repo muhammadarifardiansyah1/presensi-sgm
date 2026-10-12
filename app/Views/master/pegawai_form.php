@@ -16,7 +16,7 @@ require_once __DIR__ . '/../layouts/header.php';
 <?php endif; ?>
 
 <div class="form-card" style="padding: 32px 36px; margin-bottom: 30px;">
-    <form method="POST" enctype="multipart/form-data">
+    <form method="POST" enctype="multipart/form-data" data-turbo="false">
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 36px;">
             <!-- Kolom Kiri -->
             <div>

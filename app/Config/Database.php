@@ -28,6 +28,23 @@ class Database {
                 PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '+07:00'"
             ];
 
+            // Deteksi otomatis koneksi Cloud Database (TiDB Cloud / Aiven) yang mewajibkan SSL
+            $host = Config::getDbHost();
+            $needSsl = (
+                getenv('DB_SSL') === 'true' ||
+                strpos($host, 'tidbcloud.com') !== false ||
+                strpos($host, 'aivencloud.com') !== false
+            );
+
+            if ($needSsl) {
+                if (defined('PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT')) {
+                    $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = false;
+                }
+                if (defined('PDO::MYSQL_ATTR_SSL_CA')) {
+                    $options[PDO::MYSQL_ATTR_SSL_CA] = '';
+                }
+            }
+
             try {
                 self::$instance = new PDO($dsn, Config::getDbUser(), Config::getDbPass(), $options);
             } catch (PDOException $e) {

@@ -97,6 +97,7 @@ class LokasiController {
             $details = [];
             if ($usage['user_count'] > 0) $details[] = $usage['user_count'] . ' pegawai aktif';
             if ($usage['presensi_count'] > 0) $details[] = $usage['presensi_count'] . ' catatan presensi';
+            if (!empty($usage['lembur_count']) && $usage['lembur_count'] > 0) $details[] = $usage['lembur_count'] . ' penugasan lembur (SPL)';
             header("Location: " . Config::baseUrl('master/lokasi?err=in_use&detail=' . urlencode(implode(' dan ', $details))));
             exit;
         }

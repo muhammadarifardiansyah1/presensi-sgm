@@ -32,6 +32,11 @@ require_once __DIR__ . '/../layouts/header.php';
                 &nbsp;|&nbsp; Dilewati / gagal: <strong><?= $importRes['skipped'] ?> baris</strong>.
             <?php endif; ?>
         </div>
+        <?php if (!empty($importRes['new_jabatans'])): ?>
+            <div style="margin-top: 6px; font-size: 0.82rem; color: #065f46; background: rgba(16, 185, 129, 0.12); padding: 6px 10px; border-radius: var(--radius-sm);">
+                ✨ <strong><?= count($importRes['new_jabatans']) ?> Jabatan Baru</strong> otomatis didaftarkan ke Master Data & Pengaturan Gaji: <em><?= htmlspecialchars(implode(', ', $importRes['new_jabatans'])) ?></em>.
+            </div>
+        <?php endif; ?>
         <?php if (!empty($importRes['errors'])): ?>
             <div style="margin-top: 10px; font-size: 0.82rem; max-height: 140px; overflow-y: auto; background: rgba(0,0,0,0.06); padding: 8px 12px; border-radius: var(--radius-sm); border-left: 3px solid <?= $importRes['success'] > 0 ? '#10b981' : '#ef4444' ?>;">
                 <?php foreach ($importRes['errors'] as $err): ?>
@@ -89,49 +94,142 @@ sort($uniqueJabatan);
 ?>
 
 <div class="table-card">
-    <div class="table-toolbar">
-        <div class="table-toolbar-left">
-            <div class="table-toolbar-group">
-                <label for="sortPegawai" style="font-weight:600;">Urutkan:</label>
-                <select id="sortPegawai" class="table-sort-select" data-table="#pegawaiTable">
-                    <option value="default">Default (Urutan Asli)</option>
+    <div class="looker-filter-bar" data-table="#pegawaiTable">
+        <div class="looker-filter-bar-left">
+            <!-- Quick Search Input -->
+            <div class="looker-search-box">
+                <span class="looker-search-icon"><?= Icon::get('search', 14) ?></span>
+                <input type="text" class="looker-search-input" data-table="#pegawaiTable" placeholder="Cari Pegawai...">
+            </div>
+
+            <!-- Sort Select -->
+            <div class="looker-sort-box">
+                <select class="table-sort-select" data-table="#pegawaiTable">
+                    <option value="default">Urutkan: Default</option>
                     <option value="nama-asc">Nama Pegawai (A - Z)</option>
                     <option value="nama-desc">Nama Pegawai (Z - A)</option>
-                    <option value="nik-asc">NIP / NIK (Terkecil - Terbesar)</option>
-                    <option value="nik-desc">NIP / NIK (Terbesar - Terkecil)</option>
+                    <option value="nik-asc">NIP / NIK (Terkecil)</option>
+                    <option value="nik-desc">NIP / NIK (Terbesar)</option>
                     <option value="jabatan-asc">Jabatan (A - Z)</option>
                     <option value="lokasi-asc">Lokasi Presensi (A - Z)</option>
                     <option value="status-asc">Status (Aktif Dulu)</option>
                 </select>
             </div>
-            <div class="table-toolbar-group">
-                <label for="filterRolePegawai" style="font-weight:600;">Kategori / Role:</label>
-                <select id="filterRolePegawai" class="table-filter-select" data-table="#pegawaiTable" data-filter-col="role">
-                    <option value="">Semua Role</option>
-                    <option value="admin">Admin</option>
-                    <option value="pegawai">Pegawai</option>
-                </select>
+
+            <!-- Filter Pill: Role -->
+            <div class="looker-pill-wrapper" data-table="#pegawaiTable" data-filter-col="role" data-label="Role">
+                <button type="button" class="looker-filter-pill">
+                    <span class="looker-pill-text">Role</span>
+                    <span class="looker-pill-badge" style="display:none;"></span>
+                    <span class="looker-pill-caret">▼</span>
+                </button>
+                <div class="looker-popover">
+                    <div class="looker-popover-header">
+                        <label class="looker-select-all-label">
+                            <input type="checkbox" class="looker-select-all-input" checked> Pilih Semua
+                        </label>
+                    </div>
+                    <div class="looker-popover-search">
+                        <span class="looker-popover-search-icon"><?= Icon::get('search', 12) ?></span>
+                        <input type="text" class="looker-popover-input" placeholder="Cari role...">
+                    </div>
+                    <div class="looker-checklist">
+                        <label class="looker-check-item">
+                            <span class="looker-check-left">
+                                <input type="checkbox" value="admin" checked>
+                                <span class="looker-check-label">Admin</span>
+                            </span>
+                            <span class="looker-check-count"></span>
+                        </label>
+                        <label class="looker-check-item">
+                            <span class="looker-check-left">
+                                <input type="checkbox" value="pegawai" checked>
+                                <span class="looker-check-label">Pegawai</span>
+                            </span>
+                            <span class="looker-check-count"></span>
+                        </label>
+                    </div>
+                    <div class="looker-popover-footer">
+                        <span class="looker-footer-status">Semua dipilih</span>
+                        <button type="button" class="looker-clear-btn">Reset</button>
+                    </div>
+                </div>
             </div>
-            <div class="table-toolbar-group">
-                <label for="filterJabatanPegawai" style="font-weight:600;">Jabatan:</label>
-                <select id="filterJabatanPegawai" class="table-filter-select" data-table="#pegawaiTable" data-filter-col="jabatan">
-                    <option value="">Semua Jabatan</option>
-                    <?php foreach ($uniqueJabatan as $jb): ?>
-                        <option value="<?= htmlspecialchars(strtolower($jb)) ?>"><?= htmlspecialchars($jb) ?></option>
-                    <?php endforeach; ?>
-                </select>
+
+            <!-- Filter Pill: Jabatan (Auto-discovered) -->
+            <div class="looker-pill-wrapper" data-table="#pegawaiTable" data-filter-col="jabatan" data-label="Jabatan">
+                <button type="button" class="looker-filter-pill">
+                    <span class="looker-pill-text">Jabatan</span>
+                    <span class="looker-pill-badge" style="display:none;"></span>
+                    <span class="looker-pill-caret">▼</span>
+                </button>
+                <div class="looker-popover">
+                    <div class="looker-popover-header">
+                        <label class="looker-select-all-label">
+                            <input type="checkbox" class="looker-select-all-input" checked> Pilih Semua
+                        </label>
+                    </div>
+                    <div class="looker-popover-search">
+                        <span class="looker-popover-search-icon"><?= Icon::get('search', 12) ?></span>
+                        <input type="text" class="looker-popover-input" placeholder="Cari jabatan...">
+                    </div>
+                    <div class="looker-checklist">
+                        <!-- Auto-discovered by JavaScript engine -->
+                    </div>
+                    <div class="looker-popover-footer">
+                        <span class="looker-footer-status">Semua dipilih</span>
+                        <button type="button" class="looker-clear-btn">Reset</button>
+                    </div>
+                </div>
             </div>
-            <div class="table-toolbar-group">
-                <label for="filterStatusPegawai" style="font-weight:600;">Status:</label>
-                <select id="filterStatusPegawai" class="table-filter-select" data-table="#pegawaiTable" data-filter-col="status">
-                    <option value="">Semua Status</option>
-                    <option value="aktif">Aktif</option>
-                    <option value="nonaktif">Nonaktif</option>
-                </select>
+
+            <!-- Filter Pill: Status -->
+            <div class="looker-pill-wrapper" data-table="#pegawaiTable" data-filter-col="status" data-label="Status">
+                <button type="button" class="looker-filter-pill">
+                    <span class="looker-pill-text">Status</span>
+                    <span class="looker-pill-badge" style="display:none;"></span>
+                    <span class="looker-pill-caret">▼</span>
+                </button>
+                <div class="looker-popover">
+                    <div class="looker-popover-header">
+                        <label class="looker-select-all-label">
+                            <input type="checkbox" class="looker-select-all-input" checked> Pilih Semua
+                        </label>
+                    </div>
+                    <div class="looker-popover-search">
+                        <span class="looker-popover-search-icon"><?= Icon::get('search', 12) ?></span>
+                        <input type="text" class="looker-popover-input" placeholder="Cari status...">
+                    </div>
+                    <div class="looker-checklist">
+                        <label class="looker-check-item">
+                            <span class="looker-check-left">
+                                <input type="checkbox" value="aktif" checked>
+                                <span class="looker-check-label">Aktif</span>
+                            </span>
+                            <span class="looker-check-count"></span>
+                        </label>
+                        <label class="looker-check-item">
+                            <span class="looker-check-left">
+                                <input type="checkbox" value="nonaktif" checked>
+                                <span class="looker-check-label">Nonaktif</span>
+                            </span>
+                            <span class="looker-check-count"></span>
+                        </label>
+                    </div>
+                    <div class="looker-popover-footer">
+                        <span class="looker-footer-status">Semua dipilih</span>
+                        <button type="button" class="looker-clear-btn">Reset</button>
+                    </div>
+                </div>
             </div>
+
+            <!-- Reset All Button -->
+            <button type="button" class="looker-reset-all-btn" data-table="#pegawaiTable" title="Reset semua filter">
+                <?= Icon::get('refresh-cw', 13) ?> Reset
+            </button>
         </div>
-        <div style="font-size:0.78rem; color:var(--text-muted);">
-            💡 Klik header kolom untuk urutkan instan
+        <div class="looker-filter-bar-right">
+            <span class="looker-row-count"></span>
         </div>
     </div>
     <div class="table-responsive">
@@ -184,24 +282,39 @@ sort($uniqueJabatan);
                                     </a>
                                     <?php if ($peg['id'] !== (int)$_SESSION['user_id']): ?>
                                         <?php if ($peg['status'] === 'aktif'): ?>
-                                            <a href="<?= Config::baseUrl('pegawai/toggle-status?id=' . $peg['id']) ?>" class="btn btn-warning btn-sm" onclick="return confirm('Nonaktifkan akun <?= htmlspecialchars(addslashes($peg['nama'])) ?>? Pegawai tidak akan bisa login lagi.');" title="Tutup Akses Login (Data Historis Aman)">
+                                            <button type="button" 
+                                                    class="btn btn-warning btn-sm btn-toggle-status"
+                                                    data-id="<?= (int)$peg['id'] ?>"
+                                                    data-nama="<?= htmlspecialchars($peg['nama'], ENT_QUOTES) ?>"
+                                                    data-nik="<?= htmlspecialchars($peg['nik'], ENT_QUOTES) ?>"
+                                                    data-status="aktif"
+                                                    title="Tutup Akses Login (Data Historis Aman)">
                                                 Nonaktifkan
-                                            </a>
+                                            </button>
                                         <?php else: ?>
-                                            <a href="<?= Config::baseUrl('pegawai/toggle-status?id=' . $peg['id']) ?>" class="btn btn-success btn-sm" onclick="return confirm('Aktifkan kembali akun <?= htmlspecialchars(addslashes($peg['nama'])) ?>?');" title="Buka Kembali Akses Login">
+                                            <button type="button" 
+                                                    class="btn btn-success btn-sm btn-toggle-status"
+                                                    data-id="<?= (int)$peg['id'] ?>"
+                                                    data-nama="<?= htmlspecialchars($peg['nama'], ENT_QUOTES) ?>"
+                                                    data-nik="<?= htmlspecialchars($peg['nik'], ENT_QUOTES) ?>"
+                                                    data-status="nonaktif"
+                                                    title="Buka Kembali Akses Login">
                                                 Aktifkan
-                                            </a>
+                                            </button>
                                         <?php endif; ?>
 
                                         <?php 
                                         $hasRiwayat = (($peg['total_presensi'] ?? 0) > 0 || ($peg['total_izin'] ?? 0) > 0);
-                                        $confirmMsg = $hasRiwayat 
-                                            ? "PERHATIAN: Pegawai ini memiliki catatan riwayat presensi/izin. Sistem melindungi data ini dari penghapusan fisik agar arsip audit tidak hilang. Lanjutkan untuk verifikasi?" 
-                                            : "Hapus permanen akun pegawai ini?";
                                         ?>
-                                        <a href="<?= Config::baseUrl('pegawai/hapus?id=' . $peg['id']) ?>" class="btn btn-danger btn-sm" onclick="return confirm('<?= $confirmMsg ?>');" title="<?= $hasRiwayat ? 'Hapus Akun (Dilindungi Sistem)' : 'Hapus Permanen' ?>">
+                                        <button type="button" 
+                                                class="btn btn-danger btn-sm btn-delete-pegawai"
+                                                data-id="<?= (int)$peg['id'] ?>"
+                                                data-nama="<?= htmlspecialchars($peg['nama'], ENT_QUOTES) ?>"
+                                                data-nik="<?= htmlspecialchars($peg['nik'], ENT_QUOTES) ?>"
+                                                data-has-riwayat="<?= $hasRiwayat ? '1' : '0' ?>"
+                                                title="<?= $hasRiwayat ? 'Hapus Akun (Dilindungi Sistem)' : 'Hapus Permanen' ?>">
                                             Hapus
-                                        </a>
+                                        </button>
                                     <?php endif; ?>
                                 </div>
                             </td>
@@ -210,6 +323,58 @@ sort($uniqueJabatan);
                 <?php endif; ?>
             </tbody>
         </table>
+    </div>
+</div>
+
+<!-- Modal Konfirmasi Hapus Pegawai (In-App Dialog) -->
+<div id="modalDeletePegawai" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalDeletePegawaiTitle">
+    <div class="modal-card modal-confirm" style="max-width: 460px !important;">
+        <div class="modal-icon-danger">
+            <?= Icon::get('trash', 28) ?>
+        </div>
+        <h3 id="modalDeletePegawaiTitle" class="modal-title">Hapus Akun Pegawai?</h3>
+        <p class="modal-desc" style="margin-bottom: 12px;">
+            Apakah Anda yakin ingin menghapus akun pegawai <strong id="deletePegawaiNama" style="color:var(--text-main);">-</strong> (<code id="deletePegawaiNik">-</code>)?
+        </p>
+
+        <!-- Warning jika memiliki riwayat -->
+        <div id="deletePegawaiWarningRiwayat" style="display:none; padding:10px 12px; font-size:0.82rem; margin-bottom:14px; border-radius:var(--radius-sm); border:1px solid #fed7aa; background:#fff7ed; color:#9a3412; text-align:left;">
+            <div style="font-weight:700; margin-bottom:2px;">⚠️ Dilindungi Sistem (Arsip Audit)</div>
+            <span>Pegawai ini memiliki riwayat presensi/izin. Penghapusan fisik dicegah oleh sistem agar arsip audit penggajian tidak hilang.</span>
+        </div>
+
+        <form id="formDeletePegawai" method="GET" action="<?= Config::baseUrl('pegawai/hapus') ?>">
+            <input type="hidden" name="id" id="deletePegawaiId" value="">
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" id="btnCancelDeletePegawai">Batal</button>
+                <button type="submit" class="btn btn-danger" id="btnConfirmDeletePegawai">
+                    <?= Icon::get('trash', 14) ?> <span>Ya, Hapus Akun</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Konfirmasi Ubah Status Pegawai (In-App Dialog) -->
+<div id="modalToggleStatusPegawai" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalToggleStatusTitle">
+    <div class="modal-card modal-confirm" style="max-width: 460px !important;">
+        <div id="toggleStatusIconBox" class="modal-icon-warning">
+            <?= Icon::get('lock', 28) ?>
+        </div>
+        <h3 id="modalToggleStatusTitle" class="modal-title">Nonaktifkan Akses Pegawai?</h3>
+        <p class="modal-desc" id="modalToggleStatusDesc" style="margin-bottom: 16px;">
+            Pegawai <strong id="toggleStatusNama" style="color:var(--text-main);">-</strong> (<code id="toggleStatusNik">-</code>) tidak akan bisa login ke aplikasi absensi lagi. Seluruh data presensi tetap aman tersimpan.
+        </p>
+
+        <form id="formToggleStatusPegawai" method="GET" action="<?= Config::baseUrl('pegawai/toggle-status') ?>">
+            <input type="hidden" name="id" id="toggleStatusId" value="">
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" id="btnCancelToggleStatus">Batal</button>
+                <button type="submit" class="btn btn-warning" id="btnConfirmToggleStatus">
+                    <span id="btnConfirmToggleStatusText">Ya, Nonaktifkan</span>
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -231,7 +396,7 @@ sort($uniqueJabatan);
             </button>
         </div>
 
-        <form action="<?= Config::baseUrl('pegawai/import') ?>" method="POST" enctype="multipart/form-data" style="padding:24px;">
+        <form action="<?= Config::baseUrl('pegawai/import') ?>" method="POST" enctype="multipart/form-data" data-turbo="false" style="padding:24px;">
             <!-- Petunjuk & Download Template -->
             <div style="background:var(--bg-subtle); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:16px; margin-bottom:20px;">
                 <div style="font-size:0.86rem; font-weight:700; color:var(--text-main); margin-bottom:8px; display:flex; align-items:center; gap:6px;">
@@ -244,10 +409,10 @@ sort($uniqueJabatan);
                     <li>Ukuran file maksimal: <strong>5 MB</strong>.</li>
                 </ul>
                 <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:8px;">
-                    <a href="<?= Config::baseUrl('pegawai/template?format=xlsx') ?>" class="btn btn-primary btn-sm" style="display:inline-flex; align-items:center; gap:6px; font-weight:600;">
+                    <a href="<?= Config::baseUrl('pegawai/template?format=xlsx') ?>" data-turbo="false" class="btn btn-primary btn-sm" style="display:inline-flex; align-items:center; gap:6px; font-weight:600;">
                         <?= Icon::get('save', 14) ?> <span>Download Template Excel (.xlsx)</span>
                     </a>
-                    <a href="<?= Config::baseUrl('pegawai/template?format=csv') ?>" class="btn btn-secondary btn-sm" style="display:inline-flex; align-items:center; gap:6px; font-weight:600;">
+                    <a href="<?= Config::baseUrl('pegawai/template?format=csv') ?>" data-turbo="false" class="btn btn-secondary btn-sm" style="display:inline-flex; align-items:center; gap:6px; font-weight:600;">
                         <?= Icon::get('file-text', 14) ?> <span>Format CSV (.csv)</span>
                     </a>
                 </div>
@@ -289,17 +454,137 @@ function closeImportModal() {
     }
 }
 
-document.getElementById('importModal')?.addEventListener('click', function(e) {
-    if (e.target === this) {
-        closeImportModal();
-    }
-});
+(() => {
+    function initPegawaiModals() {
+        const modalDelete = document.getElementById('modalDeletePegawai');
+        const deleteNama = document.getElementById('deletePegawaiNama');
+        const deleteNik = document.getElementById('deletePegawaiNik');
+        const deleteId = document.getElementById('deletePegawaiId');
+        const deleteWarning = document.getElementById('deletePegawaiWarningRiwayat');
 
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        closeImportModal();
+        const modalToggle = document.getElementById('modalToggleStatusPegawai');
+        const toggleNama = document.getElementById('toggleStatusNama');
+        const toggleNik = document.getElementById('toggleStatusNik');
+        const toggleId = document.getElementById('toggleStatusId');
+        const toggleTitle = document.getElementById('modalToggleStatusTitle');
+        const toggleDesc = document.getElementById('modalToggleStatusDesc');
+        const toggleIcon = document.getElementById('toggleStatusIconBox');
+        const toggleBtn = document.getElementById('btnConfirmToggleStatus');
+        const toggleBtnText = document.getElementById('btnConfirmToggleStatusText');
+
+        function closeAll() {
+            const mDel = document.getElementById('modalDeletePegawai');
+            const mTog = document.getElementById('modalToggleStatusPegawai');
+            if (mDel) mDel.classList.remove('show');
+            if (mTog) mTog.classList.remove('show');
+            document.body.style.overflow = '';
+        }
+
+        // Delegated click handler on document (Single Guarded Listener)
+        if (!window._hasPegawaiDelegatedClickAttached) {
+            window._hasPegawaiDelegatedClickAttached = true;
+
+            document.addEventListener('click', (e) => {
+                const modalDelete = document.getElementById('modalDeletePegawai');
+                const modalToggle = document.getElementById('modalToggleStatusPegawai');
+
+                // Guard Turbo Drive: Pastikan modal pegawai masih terpasang di DOM aktif
+                if ((!modalDelete || !modalDelete.isConnected) && (!modalToggle || !modalToggle.isConnected)) return;
+
+                // Dismiss buttons
+                if (e.target.closest('#btnCancelDeletePegawai') || e.target.closest('#btnCancelToggleStatus') ||
+                    e.target === modalDelete || e.target === modalToggle) {
+                    closeAll();
+                    return;
+                }
+
+                // Delete Pegawai button
+                const btnDel = e.target.closest('.btn-delete-pegawai');
+                if (btnDel && modalDelete) {
+                    e.preventDefault();
+                    const deleteId = document.getElementById('deletePegawaiId');
+                    const deleteNama = document.getElementById('deletePegawaiNama');
+                    const deleteNik = document.getElementById('deletePegawaiNik');
+                    const deleteWarning = document.getElementById('deletePegawaiWarningRiwayat');
+
+                    if (deleteId) deleteId.value = btnDel.getAttribute('data-id');
+                    if (deleteNama) deleteNama.textContent = btnDel.getAttribute('data-nama');
+                    if (deleteNik) deleteNik.textContent = btnDel.getAttribute('data-nik');
+                    const hasRiwayat = btnDel.getAttribute('data-has-riwayat') === '1';
+                    if (deleteWarning) {
+                        deleteWarning.style.display = hasRiwayat ? 'block' : 'none';
+                    }
+                    modalDelete.classList.add('show');
+                    document.body.style.overflow = 'hidden';
+                    return;
+                }
+
+                // Toggle Status button
+                const btnTog = e.target.closest('.btn-toggle-status');
+                if (btnTog && modalToggle) {
+                    e.preventDefault();
+                    const toggleId = document.getElementById('toggleStatusId');
+                    const toggleNama = document.getElementById('toggleStatusNama');
+                    const toggleNik = document.getElementById('toggleStatusNik');
+                    const toggleTitle = document.getElementById('modalToggleStatusTitle');
+                    const toggleDesc = document.getElementById('modalToggleStatusDesc');
+                    const toggleIcon = document.getElementById('toggleStatusIconBox');
+                    const toggleBtn = document.getElementById('btnConfirmToggleStatus');
+                    const toggleBtnText = document.getElementById('btnConfirmToggleStatusText');
+
+                    const id = btnTog.getAttribute('data-id');
+                    const nama = btnTog.getAttribute('data-nama');
+                    const nik = btnTog.getAttribute('data-nik');
+                    const currentStatus = btnTog.getAttribute('data-status');
+
+                    if (toggleId) toggleId.value = id;
+                    if (toggleNama) toggleNama.textContent = nama;
+                    if (toggleNik) toggleNik.textContent = nik;
+
+                    if (currentStatus === 'aktif') {
+                        if (toggleTitle) toggleTitle.textContent = 'Nonaktifkan Akses Pegawai?';
+                        if (toggleDesc) toggleDesc.innerHTML = `Pegawai <strong style="color:var(--text-main);">${nama}</strong> (<code>${nik}</code>) tidak akan bisa login ke aplikasi absensi lagi. Seluruh riwayat presensi tetap aman.`;
+                        if (toggleIcon) {
+                            toggleIcon.className = 'modal-icon-warning';
+                            toggleIcon.innerHTML = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`;
+                        }
+                        if (toggleBtn) toggleBtn.className = 'btn btn-warning';
+                        if (toggleBtnText) toggleBtnText.textContent = 'Ya, Nonaktifkan Akun';
+                    } else {
+                        if (toggleTitle) toggleTitle.textContent = 'Aktifkan Kembali Akses Pegawai?';
+                        if (toggleDesc) toggleDesc.innerHTML = `Buka kembali akses login untuk pegawai <strong style="color:var(--text-main);">${nama}</strong> (<code>${nik}</code>). Pegawai dapat kembali mencatat presensi.`;
+                        if (toggleIcon) {
+                            toggleIcon.className = 'modal-icon-success';
+                            toggleIcon.innerHTML = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`;
+                        }
+                        if (toggleBtn) toggleBtn.className = 'btn btn-primary';
+                        if (toggleBtnText) toggleBtnText.textContent = 'Ya, Aktifkan Akun';
+                    }
+
+                    modalToggle.classList.add('show');
+                    document.body.style.overflow = 'hidden';
+                    return;
+                }
+            });
+        }
+
+        if (!window._hasPegawaiEscapeAttached) {
+            window._hasPegawaiEscapeAttached = true;
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    const modalDelete = document.getElementById('modalDeletePegawai');
+                    const modalToggle = document.getElementById('modalToggleStatusPegawai');
+                    if ((modalDelete && modalDelete.isConnected) || (modalToggle && modalToggle.isConnected)) {
+                        closeAll();
+                        if (typeof closeImportModal === 'function') closeImportModal();
+                    }
+                }
+            });
+        }
     }
-});
+
+    initPegawaiModals();
+})();
 </script>
 
 <?php require_once __DIR__ . '/../layouts/footer.php'; ?>

@@ -61,6 +61,89 @@ class Presensi {
         }
     }
 
+    /**
+     * Menghitung durasi kerja efektif yang dibatasi (capped) oleh batas jam kerja admin.
+     * Mencegah pembengkakan jam kerja jika pegawai lupa pulang atau baru klik pulang larut malam.
+     * Batas atas = Jam Pulang Standar Lokasi + Jam Lembur (SPL yang disetujui).
+     *
+     * @param string $tanggal Tanggal presensi (Y-m-d)
+     * @param string|null $jamMasuk Waktu masuk (H:i:s)
+     * @param string|null $jamPulang Waktu pulang aktual (H:i:s)
+     * @param string|null $jamPulangStandar Jam pulang standar lokasi kantor (H:i:s, default 17:00:00)
+     * @param float $jamLembur Jam lembur yang disetujui SPL (default 0.00)
+     * @return array [detik, format, jam_desimal, is_capped, waktu_selesai_efektif]
+     */
+    public function calculateCappedDuration(
+        string $tanggal,
+        ?string $jamMasuk,
+        ?string $jamPulang,
+        ?string $jamPulangStandar = '17:00:00',
+        float $jamLembur = 0.00
+    ): array {
+        if (empty($jamMasuk)) {
+            return [
+                'detik' => 0, 
+                'format' => '0 jam 0 menit', 
+                'jam_desimal' => 0.0, 
+                'is_capped' => false, 
+                'waktu_selesai_efektif' => '-'
+            ];
+        }
+
+        $standarPulang = !empty($jamPulangStandar) ? $jamPulangStandar : '17:00:00';
+        $tMasuk = strtotime("{$tanggal} {$jamMasuk}");
+        $tStandarPulang = strtotime("{$tanggal} {$standarPulang}");
+
+        $detikLembur = (int)round($jamLembur * 3600);
+        $tCapMaksimal = $tStandarPulang + $detikLembur;
+
+        // Fallback jika jam masuk melebihi cap (misal shift malam khusus)
+        if ($tMasuk >= $tCapMaksimal) {
+            $tCapMaksimal = $tMasuk + (8 * 3600);
+        }
+
+        $isCapped = false;
+        $today = date('Y-m-d');
+
+        if (!empty($jamPulang)) {
+            $tPulang = strtotime("{$tanggal} {$jamPulang}");
+            if ($tPulang > $tCapMaksimal) {
+                $tSelesai = $tCapMaksimal;
+                $isCapped = true;
+            } else {
+                $tSelesai = $tPulang;
+            }
+        } else {
+            // Belum atau tidak absen pulang
+            if ($tanggal === $today) {
+                $now = time();
+                if ($now > $tCapMaksimal) {
+                    $tSelesai = $tCapMaksimal;
+                    $isCapped = true;
+                } else {
+                    $tSelesai = max($tMasuk, $now);
+                }
+            } else {
+                // Hari lampau tapi lupa absen pulang -> capped di jam pulang kantor / SPL
+                $tSelesai = $tCapMaksimal;
+                $isCapped = true;
+            }
+        }
+
+        $detik = max(0, $tSelesai - $tMasuk);
+        $hours = floor($detik / 3600);
+        $minutes = floor(($detik % 3600) / 60);
+        $format = "{$hours} jam {$minutes} menit";
+
+        return [
+            'detik' => $detik,
+            'format' => $format,
+            'jam_desimal' => round($detik / 3600, 2),
+            'is_capped' => $isCapped,
+            'waktu_selesai_efektif' => date('H:i:s', $tSelesai)
+        ];
+    }
+
     public function absenKeluar(
         int $presensiId, 
         string $jamPulang, 
@@ -70,9 +153,9 @@ class Presensi {
         float $jarak, 
         string $totalJam
     ): bool {
-        // Fetch location schedule for overtime calculation
+        // Fetch location schedule and attendance data for overtime verification
         $stmtPres = $this->db->prepare("
-            SELECT p.lokasi_id, l.jam_pulang 
+            SELECT p.id, p.user_id, p.tanggal, p.lokasi_id, p.jam_masuk, l.jam_pulang 
             FROM `presensi` p 
             LEFT JOIN `lokasi_presensi` l ON p.lokasi_id = l.id 
             WHERE p.id = ?
@@ -82,10 +165,47 @@ class Presensi {
         $jamPulangStandar = (!empty($presRow['jam_pulang'])) ? $presRow['jam_pulang'] : '17:00:00';
 
         $jamLembur = 0.00;
-        if (strtotime($jamPulang) > strtotime($jamPulangStandar)) {
-            $lemburDiff = strtotime($jamPulang) - strtotime($jamPulangStandar);
-            $jamLembur = round($lemburDiff / 3600, 2);
+        // VALIDASI INTEGRASI SURAT PERINTAH LEMBUR (SPL):
+        // Mencegah kecurangan karyawan yang sengaja pulang terlambat demi uang lembur.
+        // Lembur HANYA diakui jika Admin telah menerbitkan Surat Perintah Lembur aktif untuk pegawai tersebut pada tanggal ini.
+        if (!empty($presRow['user_id']) && !empty($presRow['tanggal'])) {
+            require_once __DIR__ . '/PenugasanLembur.php';
+            $penugasanModel = new PenugasanLembur();
+            $penugasan = $penugasanModel->getPenugasanAktifUser((int)$presRow['user_id'], $presRow['tanggal']);
+
+            if ($penugasan) {
+                // Tentukan patokan jam mulai lembur (prioritas jam_mulai SPL, fallback ke jam pulang standar lokasi)
+                $jamMulaiLemburRef = !empty($penugasan['jam_mulai']) ? $penugasan['jam_mulai'] : $jamPulangStandar;
+
+                if (strtotime($jamPulang) > strtotime($jamMulaiLemburRef)) {
+                    $lemburDiff = strtotime($jamPulang) - strtotime($jamMulaiLemburRef);
+                    $hitungLembur = round($lemburDiff / 3600, 2);
+
+                    // Batasi maksimal jam lembur sesuai batas maksimal yang disetujui pada SPL (Capping)
+                    $maksimalJam = (float)($penugasan['maksimal_jam'] ?? 0);
+                    if ($maksimalJam > 0) {
+                        $jamLembur = min($hitungLembur, $maksimalJam);
+                    } else {
+                        $jamLembur = $hitungLembur;
+                    }
+
+                    // Sinkronisasi status dan jam lembur aktual di tabel pivot penugasan_lembur_pegawai
+                    if (!empty($penugasan['plp_id'])) {
+                        $penugasanModel->updateJamLemburAktual((int)$penugasan['plp_id'], $jamLembur);
+                    }
+                }
+            }
         }
+
+        // Hitung total jam kerja dengan batas atas (auto-capped) jam kerja admin & SPL
+        $calcDuration = $this->calculateCappedDuration(
+            $presRow['tanggal'] ?? date('Y-m-d'),
+            $presRow['jam_masuk'] ?? null,
+            $jamPulang,
+            $jamPulangStandar,
+            $jamLembur
+        );
+        $totalJam = $calcDuration['format'];
 
         $stmt = $this->db->prepare("
             UPDATE `presensi` SET
@@ -111,7 +231,8 @@ class Presensi {
                 u.nama AS nama_pegawai,
                 u.nik,
                 u.jabatan,
-                l.nama_lokasi
+                l.nama_lokasi,
+                l.jam_pulang AS jam_pulang_standar
             FROM `presensi` p
             JOIN `users` u ON p.user_id = u.id
             LEFT JOIN `lokasi_presensi` l ON p.lokasi_id = l.id
@@ -128,7 +249,24 @@ class Presensi {
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
-        return $stmt->fetchAll();
+        $rows = $stmt->fetchAll();
+
+        $today = date('Y-m-d');
+        foreach ($rows as &$r) {
+            if ((empty($r['total_jam_kerja']) || $r['total_jam_kerja'] === '-') && !empty($r['jam_masuk']) && $r['tanggal'] < $today) {
+                $calc = $this->calculateCappedDuration(
+                    $r['tanggal'],
+                    $r['jam_masuk'],
+                    $r['jam_pulang'] ?? null,
+                    $r['jam_pulang_standar'] ?? '17:00:00',
+                    (float)($r['jam_lembur'] ?? 0)
+                );
+                $r['total_jam_kerja'] = $calc['format'];
+            }
+        }
+        unset($r);
+
+        return $rows;
     }
 
     public function getRekapHarian(string $tanggalMulai, ?string $tanggalSelesai = null, ?int $userId = null): array {
@@ -142,7 +280,8 @@ class Presensi {
                 u.nama AS nama_pegawai,
                 u.nik,
                 u.jabatan,
-                l.nama_lokasi
+                l.nama_lokasi,
+                l.jam_pulang AS jam_pulang_standar
             FROM `presensi` p
             JOIN `users` u ON p.user_id = u.id
             LEFT JOIN `lokasi_presensi` l ON p.lokasi_id = l.id
@@ -159,7 +298,24 @@ class Presensi {
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
-        return $stmt->fetchAll();
+        $rows = $stmt->fetchAll();
+
+        $today = date('Y-m-d');
+        foreach ($rows as &$r) {
+            if ((empty($r['total_jam_kerja']) || $r['total_jam_kerja'] === '-') && !empty($r['jam_masuk']) && $r['tanggal'] < $today) {
+                $calc = $this->calculateCappedDuration(
+                    $r['tanggal'],
+                    $r['jam_masuk'],
+                    $r['jam_pulang'] ?? null,
+                    $r['jam_pulang_standar'] ?? '17:00:00',
+                    (float)($r['jam_lembur'] ?? 0)
+                );
+                $r['total_jam_kerja'] = $calc['format'];
+            }
+        }
+        unset($r);
+
+        return $rows;
     }
 
     public function countHadirHariIni(string $tanggal): int {
@@ -231,14 +387,15 @@ class Presensi {
             }
         }
 
-        if ($jamMasuk && $jamPulang) {
-            $diff = strtotime($jamPulang) - strtotime($jamMasuk);
-            if ($diff > 0) {
-                $jam = floor($diff / 3600);
-                $menit = floor(($diff % 3600) / 60);
-                $totalJam = "{$jam} jam {$menit} menit";
-            }
+        $userId = (int)($data['user_id'] ?? 0);
+        $tanggal = trim($data['tanggal'] ?? '');
+        if ($userId <= 0 || empty($tanggal)) {
+            return false;
+        }
 
+        if (isset($data['jam_lembur']) && is_numeric($data['jam_lembur'])) {
+            $jamLembur = (float)$data['jam_lembur'];
+        } elseif ($jamMasuk && $jamPulang) {
             $pulangSec = strtotime($jamPulang);
             $standarPulangSec = strtotime($jamPulangStandar);
             if ($pulangSec > $standarPulangSec) {
@@ -247,19 +404,20 @@ class Presensi {
             }
         }
 
-        $userId = (int)($data['user_id'] ?? 0);
-        $tanggal = trim($data['tanggal'] ?? '');
-        if ($userId <= 0 || empty($tanggal)) {
-            return false;
+        if ($jamMasuk && $jamPulang) {
+            $calc = $this->calculateCappedDuration(
+                $tanggal,
+                $jamMasuk,
+                $jamPulang,
+                $jamPulangStandar,
+                $jamLembur
+            );
+            $totalJam = $calc['format'];
         }
 
         // Cek apakah sudah pernah presensi di tanggal tersebut
         if ($this->findByUserAndTanggal($userId, $tanggal)) {
             return false;
-        }
-
-        if (isset($data['jam_lembur']) && is_numeric($data['jam_lembur'])) {
-            $jamLembur = (float)$data['jam_lembur'];
         }
 
         try {
@@ -318,14 +476,10 @@ class Presensi {
             }
         }
 
-        if ($jamMasuk && $jamPulang) {
-            $diff = strtotime($jamPulang) - strtotime($jamMasuk);
-            if ($diff > 0) {
-                $jam = floor($diff / 3600);
-                $menit = floor(($diff % 3600) / 60);
-                $totalJam = "{$jam} jam {$menit} menit";
-            }
-
+        $tanggal = trim($data['tanggal'] ?? '');
+        if (isset($data['jam_lembur']) && is_numeric($data['jam_lembur'])) {
+            $jamLembur = (float)$data['jam_lembur'];
+        } elseif ($jamMasuk && $jamPulang) {
             $pulangSec = strtotime($jamPulang);
             $standarPulangSec = strtotime($jamPulangStandar);
             if ($pulangSec > $standarPulangSec) {
@@ -334,8 +488,15 @@ class Presensi {
             }
         }
 
-        if (isset($data['jam_lembur']) && is_numeric($data['jam_lembur'])) {
-            $jamLembur = (float)$data['jam_lembur'];
+        if ($jamMasuk && $jamPulang) {
+            $calc = $this->calculateCappedDuration(
+                $tanggal ?: date('Y-m-d'),
+                $jamMasuk,
+                $jamPulang,
+                $jamPulangStandar,
+                $jamLembur
+            );
+            $totalJam = $calc['format'];
         }
 
         $stmt = $this->db->prepare("
@@ -504,5 +665,517 @@ class Presensi {
             'message' => 'Google Apps Script merespons kode HTTP ' . $httpCode . ': ' . substr($response, 0, 150)
         ];
     }
+
+    /**
+     * Mengambil statistik presensi bulanan pegawai (Month-to-Date)
+     * Menggunakan durasi kerja efektif dengan batas atas (auto-capped).
+     */
+    public function getStatistikBulananPegawai(int $userId, int $bulan, int $tahun): array {
+        $stmt = $this->db->prepare("
+            SELECT 
+                p.`tanggal`,
+                p.`jam_masuk`,
+                p.`jam_pulang`,
+                p.`total_terlambat`,
+                p.`jam_lembur`,
+                l.jam_pulang AS jam_pulang_standar
+            FROM `presensi` p
+            LEFT JOIN `lokasi_presensi` l ON p.lokasi_id = l.id
+            WHERE p.`user_id` = ? AND MONTH(p.`tanggal`) = ? AND YEAR(p.`tanggal`) = ?
+        ");
+        $stmt->execute([$userId, $bulan, $tahun]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $totalHadir = 0;
+        $tepatWaktu = 0;
+        $terlambat  = 0;
+        $totalDetik = 0;
+        $totalLembur = 0.0;
+
+        foreach ($rows as $r) {
+            if (!empty($r['jam_masuk'])) {
+                $totalHadir++;
+
+                if (empty($r['total_terlambat']) || $r['total_terlambat'] === 'Tepat Waktu') {
+                    $tepatWaktu++;
+                } else {
+                    $terlambat++;
+                }
+
+                $lembur = (float)($r['jam_lembur'] ?? 0);
+                $totalLembur += $lembur;
+
+                $calc = $this->calculateCappedDuration(
+                    $r['tanggal'],
+                    $r['jam_masuk'],
+                    $r['jam_pulang'],
+                    $r['jam_pulang_standar'] ?? '17:00:00',
+                    $lembur
+                );
+                $totalDetik += $calc['detik'];
+            }
+        }
+
+        // Hitung estimasi hari kerja berjalan bulan ini (Senin - Sabtu)
+        $hariIni = (int)date('d');
+        $hariKerjaBerjalan = 0;
+        for ($d = 1; $d <= $hariIni; $d++) {
+            $w = date('w', strtotime("{$tahun}-{$bulan}-{$d}"));
+            if ($w != 0) { // Bukan hari Minggu
+                $hariKerjaBerjalan++;
+            }
+        }
+        $persentase = ($hariKerjaBerjalan > 0) ? min(100, round(($totalHadir / $hariKerjaBerjalan) * 100)) : 100;
+
+        $jamFormat = '0 Jam';
+        if ($totalDetik >= 3600) {
+            $j = floor($totalDetik / 3600);
+            $m = floor(($totalDetik % 3600) / 60);
+            $jamFormat = ($m > 0) ? "{$j} Jam {$m} Menit" : "{$j} Jam";
+        } elseif ($totalDetik > 0) {
+            $m = max(1, floor($totalDetik / 60));
+            $jamFormat = "{$m} Menit";
+        }
+
+        return [
+            'total_hadir'            => $totalHadir,
+            'total_tepat_waktu'      => $tepatWaktu,
+            'total_terlambat'        => $terlambat,
+            'total_detik_kerja'      => $totalDetik,
+            'total_jam_kerja_format' => $jamFormat,
+            'total_jam_kerja_desimal'=> round($totalDetik / 3600, 1),
+            'total_lembur'           => $totalLembur,
+            'total_jam_lembur'       => $totalLembur,
+            'persentase_kehadiran'   => $persentase,
+            'hari_kerja_berjalan'    => $hariKerjaBerjalan
+        ];
+    }
+
+    /**
+     * Mengambil data tren jam kerja dan kehadiran 7 hari terakhir (H-6 s/d Hari Ini)
+     */
+    public function getTrenTujuhHari(int $userId): array {
+        $namaHariIndo = [
+            'Sun' => 'Min', 'Mon' => 'Sen', 'Tue' => 'Sel', 
+            'Wed' => 'Rab', 'Thu' => 'Kam', 'Fri' => 'Jum', 'Sat' => 'Sab'
+        ];
+
+        $tujuhHari = [];
+        for ($i = 6; $i >= 0; $i--) {
+            $tgl = date('Y-m-d', strtotime("-{$i} days"));
+            $ts = strtotime($tgl);
+            $dayOfWeek = date('D', $ts);
+            $isSunday = ($dayOfWeek === 'Sun');
+
+            $tujuhHari[$tgl] = [
+                'tanggal'        => $tgl,
+                'hari'           => date('l', $ts),
+                'hari_pendek'    => $namaHariIndo[$dayOfWeek] ?? $dayOfWeek,
+                'is_sunday'      => $isSunday,
+                'is_today'       => ($tgl === date('Y-m-d')),
+                'jam_kerja_desimal' => 0.0,
+                'jam_kerja_format'  => '0j',
+                'height_percent' => 8, // Minimum pill height
+                'status'         => $isSunday ? 'libur' : 'kosong',
+                'status_label'   => $isSunday ? 'Libur' : 'Belum Ada Data'
+            ];
+        }
+
+        $minTgl = array_key_first($tujuhHari);
+        $stmt = $this->db->prepare("
+            SELECT p.`tanggal`, p.`jam_masuk`, p.`jam_pulang`, p.`status_kehadiran`, p.`total_terlambat`, p.`jam_lembur`,
+                   l.jam_pulang AS jam_pulang_standar
+            FROM `presensi` p
+            LEFT JOIN `lokasi_presensi` l ON p.lokasi_id = l.id
+            WHERE p.`user_id` = ? AND p.`tanggal` >= ?
+        ");
+        $stmt->execute([$userId, $minTgl]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($rows as $r) {
+            $tgl = $r['tanggal'];
+            if (isset($tujuhHari[$tgl])) {
+                $calc = $this->calculateCappedDuration(
+                    $r['tanggal'],
+                    $r['jam_masuk'],
+                    $r['jam_pulang'],
+                    $r['jam_pulang_standar'] ?? '17:00:00',
+                    (float)($r['jam_lembur'] ?? 0)
+                );
+                $detik = $calc['detik'];
+                $jam = round($detik / 3600, 1);
+
+                // Hitung tinggi kapsul bar chart (8 jam kerja standar = 100%)
+                $heightPercent = ($jam > 0) ? min(100, max(16, round(($jam / 8) * 100))) : 8;
+
+                $tujuhHari[$tgl]['jam_kerja_desimal'] = $jam;
+                $tujuhHari[$tgl]['jam_kerja_format']  = ($jam > 0) ? "{$jam}j" : "0j";
+                $tujuhHari[$tgl]['height_percent']    = $heightPercent;
+                $tujuhHari[$tgl]['status']            = $r['status_kehadiran'] ?? 'hadir';
+                $tujuhHari[$tgl]['status_label']      = ($r['total_terlambat'] === 'Tepat Waktu' || empty($r['total_terlambat'])) 
+                                                        ? 'Tepat Waktu' : 'Terlambat';
+            }
+        }
+
+        return array_values($tujuhHari);
+    }
+
+    /**
+     * Mengambil riwayat aktivitas terpadu terakhir pegawai (Presensi Fisik + Pengajuan Izin/Sakit/Cuti)
+     */
+    public function getRiwayatTerakhirPegawai(int $userId, int $limit = 5): array {
+        $sql = "
+            (
+                SELECT 
+                    'presensi' AS `tipe_aktivitas`,
+                    p.id,
+                    p.tanggal,
+                    COALESCE(p.jam_pulang, p.jam_masuk, '00:00:00') AS `waktu_sort`,
+                    p.jam_masuk,
+                    p.jam_pulang,
+                    p.status_kehadiran,
+                    p.total_terlambat,
+                    p.total_jam_kerja,
+                    p.jam_lembur,
+                    l.nama_lokasi,
+                    l.jam_pulang AS jam_pulang_standar,
+                    NULL AS `kategori`,
+                    NULL AS `tanggal_mulai`,
+                    NULL AS `tanggal_selesai`,
+                    NULL AS `keterangan`,
+                    NULL AS `status_approval`,
+                    NULL AS `catatan_admin`,
+                    NULL AS `dokumen_bukti`,
+                    p.created_at
+                FROM `presensi` p
+                LEFT JOIN `lokasi_presensi` l ON p.lokasi_id = l.id
+                WHERE p.user_id = ?
+            )
+            UNION ALL
+            (
+                SELECT 
+                    'ketidakhadiran' AS `tipe_aktivitas`,
+                    k.id,
+                    k.tanggal_mulai AS `tanggal`,
+                    TIME(k.created_at) AS `waktu_sort`,
+                    NULL AS `jam_masuk`,
+                    NULL AS `jam_pulang`,
+                    k.kategori AS `status_kehadiran`,
+                    NULL AS `total_terlambat`,
+                    NULL AS `total_jam_kerja`,
+                    0.00 AS `jam_lembur`,
+                    NULL AS `nama_lokasi`,
+                    '17:00:00' AS jam_pulang_standar,
+                    k.kategori,
+                    k.tanggal_mulai,
+                    k.tanggal_selesai,
+                    k.keterangan,
+                    k.status_approval,
+                    k.catatan_admin,
+                    k.dokumen_bukti,
+                    k.created_at
+                FROM `ketidakhadiran` k
+                WHERE k.user_id = ?
+            )
+            ORDER BY `tanggal` DESC, `waktu_sort` DESC, `id` DESC
+            LIMIT ?
+        ";
+        $stmt = $this->db->prepare($sql);
+        $stmt->bindValue(1, $userId, PDO::PARAM_INT);
+        $stmt->bindValue(2, $userId, PDO::PARAM_INT);
+        $stmt->bindValue(3, $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $today = date('Y-m-d');
+        foreach ($rows as &$r) {
+            if (($r['tipe_aktivitas'] ?? '') === 'presensi' && (empty($r['total_jam_kerja']) || $r['total_jam_kerja'] === '-') && !empty($r['jam_masuk']) && $r['tanggal'] < $today) {
+                $calc = $this->calculateCappedDuration(
+                    $r['tanggal'],
+                    $r['jam_masuk'],
+                    $r['jam_pulang'] ?? null,
+                    $r['jam_pulang_standar'] ?? '17:00:00',
+                    (float)($r['jam_lembur'] ?? 0)
+                );
+                $r['total_jam_kerja'] = $calc['format'];
+            }
+        }
+        unset($r);
+
+        return $rows;
+    }
+
+    /**
+     * Mengambil seluruh riwayat aktivitas pegawai untuk halaman mandiri /riwayat
+     */
+    public function getAllRiwayatPegawai(int $userId, ?int $bulan = null, ?int $tahun = null, ?string $tipe = null): array {
+        $tipe = $tipe ?: 'semua';
+        $paramsPres = [$userId];
+        $paramsIzin = [$userId];
+        $paramsLembur = [$userId];
+
+        $wherePresDate = "";
+        $whereIzinDate = "";
+        $whereLemburDate = "";
+        if ($bulan && $tahun) {
+            $wherePresDate = " AND MONTH(p.tanggal) = ? AND YEAR(p.tanggal) = ?";
+            $paramsPres[] = $bulan;
+            $paramsPres[] = $tahun;
+
+            $whereIzinDate = " AND ((MONTH(k.tanggal_mulai) = ? OR MONTH(k.tanggal_selesai) = ?) AND YEAR(k.tanggal_mulai) = ?)";
+            $paramsIzin[] = $bulan;
+            $paramsIzin[] = $bulan;
+            $paramsIzin[] = $tahun;
+
+            $whereLemburDate = " AND MONTH(pl.tanggal) = ? AND YEAR(pl.tanggal) = ?";
+            $paramsLembur[] = $bulan;
+            $paramsLembur[] = $tahun;
+        }
+
+        $sqlPres = "
+            SELECT 
+                'presensi' AS `tipe_aktivitas`,
+                p.id,
+                p.tanggal,
+                COALESCE(p.jam_pulang, p.jam_masuk, '00:00:00') AS `waktu_sort`,
+                p.jam_masuk,
+                p.jam_pulang,
+                p.status_kehadiran,
+                p.total_terlambat,
+                p.total_jam_kerja,
+                p.jam_lembur,
+                l.nama_lokasi,
+                l.jam_pulang AS jam_pulang_standar,
+                NULL AS `kategori`,
+                NULL AS `tanggal_mulai`,
+                NULL AS `tanggal_selesai`,
+                NULL AS `keterangan`,
+                NULL AS `status_approval`,
+                NULL AS `catatan_admin`,
+                NULL AS `dokumen_bukti`,
+                p.created_at
+            FROM `presensi` p
+            LEFT JOIN `lokasi_presensi` l ON p.lokasi_id = l.id
+            WHERE p.user_id = ? {$wherePresDate}
+        ";
+
+        $sqlIzin = "
+            SELECT 
+                'ketidakhadiran' AS `tipe_aktivitas`,
+                k.id,
+                k.tanggal_mulai AS `tanggal`,
+                TIME(k.created_at) AS `waktu_sort`,
+                NULL AS `jam_masuk`,
+                NULL AS `jam_pulang`,
+                k.kategori AS `status_kehadiran`,
+                NULL AS `total_terlambat`,
+                NULL AS `total_jam_kerja`,
+                0.00 AS `jam_lembur`,
+                NULL AS `nama_lokasi`,
+                '17:00:00' AS jam_pulang_standar,
+                k.kategori,
+                k.tanggal_mulai,
+                k.tanggal_selesai,
+                k.keterangan,
+                k.status_approval,
+                k.catatan_admin,
+                k.dokumen_bukti,
+                k.created_at
+            FROM `ketidakhadiran` k
+            WHERE k.user_id = ? {$whereIzinDate}
+        ";
+
+        $sqlLembur = "
+            SELECT 
+                'lembur' AS `tipe_aktivitas`,
+                pl.id,
+                pl.tanggal,
+                pl.jam_mulai AS `waktu_sort`,
+                pl.jam_mulai AS `jam_masuk`,
+                pl.jam_selesai AS `jam_pulang`,
+                pl.status AS `status_kehadiran`,
+                NULL AS `total_terlambat`,
+                NULL AS `total_jam_kerja`,
+                pl.maksimal_jam AS `jam_lembur`,
+                l.nama_lokasi,
+                l.jam_pulang AS jam_pulang_standar,
+                pl.nomor_sp_lembur AS `kategori`,
+                pl.tanggal AS `tanggal_mulai`,
+                pl.tanggal AS `tanggal_selesai`,
+                pl.keterangan,
+                plp.status AS `status_approval`,
+                CAST(plp.jam_lembur_aktual AS CHAR) AS `catatan_admin`,
+                NULL AS `dokumen_bukti`,
+                pl.created_at
+            FROM `penugasan_lembur_pegawai` plp
+            JOIN `penugasan_lembur` pl ON plp.penugasan_lembur_id = pl.id
+            LEFT JOIN `lokasi_presensi` l ON pl.lokasi_id = l.id
+            WHERE plp.user_id = ? {$whereLemburDate}
+        ";
+
+        if ($tipe === 'presensi') {
+            $sql = $sqlPres . " ORDER BY `tanggal` DESC, `waktu_sort` DESC";
+            $params = $paramsPres;
+        } elseif ($tipe === 'ketidakhadiran') {
+            $sql = $sqlIzin . " ORDER BY `tanggal` DESC, `waktu_sort` DESC";
+            $params = $paramsIzin;
+        } elseif ($tipe === 'lembur') {
+            $sql = $sqlLembur . " ORDER BY `tanggal` DESC, `waktu_sort` DESC";
+            $params = $paramsLembur;
+        } else {
+            $sql = "({$sqlPres}) UNION ALL ({$sqlIzin}) UNION ALL ({$sqlLembur}) ORDER BY `tanggal` DESC, `waktu_sort` DESC, `id` DESC";
+            $params = array_merge($paramsPres, $paramsIzin, $paramsLembur);
+        }
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $today = date('Y-m-d');
+        foreach ($rows as &$r) {
+            if (($r['tipe_aktivitas'] ?? '') === 'presensi' && (empty($r['total_jam_kerja']) || $r['total_jam_kerja'] === '-') && !empty($r['jam_masuk']) && $r['tanggal'] < $today) {
+                $calc = $this->calculateCappedDuration(
+                    $r['tanggal'],
+                    $r['jam_masuk'],
+                    $r['jam_pulang'] ?? null,
+                    $r['jam_pulang_standar'] ?? '17:00:00',
+                    (float)($r['jam_lembur'] ?? 0)
+                );
+                $r['total_jam_kerja'] = $calc['format'];
+            }
+        }
+        unset($r);
+
+        return $rows;
+    }
+
+    /**
+     * Mengambil statistik presensi harian untuk Admin (Total Hadir, Tepat Waktu, Terlambat)
+     * Menggunakan 1 query agregat terindeks
+     */
+    public function getStatistikHarianAdmin(string $tanggal): array {
+        $stmt = $this->db->prepare("
+            SELECT 
+                COUNT(*) AS total_hadir,
+                SUM(CASE WHEN total_terlambat = 'Tepat Waktu' OR total_terlambat = '' OR total_terlambat IS NULL THEN 1 ELSE 0 END) AS tepat_waktu,
+                SUM(CASE WHEN total_terlambat != 'Tepat Waktu' AND total_terlambat != '' AND total_terlambat IS NOT NULL THEN 1 ELSE 0 END) AS terlambat
+            FROM `presensi`
+            WHERE `tanggal` = ? AND `jam_masuk` IS NOT NULL
+        ");
+        $stmt->execute([$tanggal]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        return [
+            'total_hadir' => (int)($row['total_hadir'] ?? 0),
+            'tepat_waktu' => (int)($row['tepat_waktu'] ?? 0),
+            'terlambat'   => (int)($row['terlambat'] ?? 0)
+        ];
+    }
+
+    /**
+     * Mengambil tren kehadiran 7 hari terakhir untuk Admin
+     * Dieksekusi dalam 1 query batch GROUP BY tanggal
+     */
+    public function getTrenKehadiranAdmin(int $totalPegawai): array {
+        $namaHariIndo = [
+            'Sun' => 'Min', 'Mon' => 'Sen', 'Tue' => 'Sel', 
+            'Wed' => 'Rab', 'Thu' => 'Kam', 'Fri' => 'Jum', 'Sat' => 'Sab'
+        ];
+
+        $tujuhHari = [];
+        for ($i = 6; $i >= 0; $i--) {
+            $tgl = date('Y-m-d', strtotime("-{$i} days"));
+            $ts = strtotime($tgl);
+            $dayOfWeek = date('D', $ts);
+            $isSunday = ($dayOfWeek === 'Sun');
+
+            $tujuhHari[$tgl] = [
+                'tanggal'        => $tgl,
+                'hari'           => date('l', $ts),
+                'hari_pendek'    => $namaHariIndo[$dayOfWeek] ?? $dayOfWeek,
+                'is_sunday'      => $isSunday,
+                'is_today'       => ($tgl === date('Y-m-d')),
+                'total_hadir'    => 0,
+                'tepat_waktu'    => 0,
+                'terlambat'      => 0,
+                'persentase'     => 0,
+                'height_percent' => 12,
+                'status_label'   => $isSunday ? 'Hari Libur' : '0 Hadir'
+            ];
+        }
+
+        $minTgl = array_key_first($tujuhHari);
+        $stmt = $this->db->prepare("
+            SELECT `tanggal`,
+                   COUNT(*) AS `total_hadir`,
+                   SUM(CASE WHEN `total_terlambat` = 'Tepat Waktu' OR `total_terlambat` = '' OR `total_terlambat` IS NULL THEN 1 ELSE 0 END) AS `tepat_waktu`,
+                   SUM(CASE WHEN `total_terlambat` != 'Tepat Waktu' AND `total_terlambat` != '' AND `total_terlambat` IS NOT NULL THEN 1 ELSE 0 END) AS `terlambat`
+            FROM `presensi`
+            WHERE `tanggal` >= ? AND `jam_masuk` IS NOT NULL
+            GROUP BY `tanggal`
+        ");
+        $stmt->execute([$minTgl]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $maxHadir = max(1, $totalPegawai);
+
+        foreach ($rows as $r) {
+            $tgl = $r['tanggal'];
+            if (isset($tujuhHari[$tgl])) {
+                $hadir = (int)($r['total_hadir'] ?? 0);
+                $tepat = (int)($r['tepat_waktu'] ?? 0);
+                $telat = (int)($r['terlambat'] ?? 0);
+                $pct = $totalPegawai > 0 ? round(($hadir / $totalPegawai) * 100) : 0;
+                $height = min(100, max(12, round(($hadir / $maxHadir) * 100)));
+
+                $tujuhHari[$tgl]['total_hadir']    = $hadir;
+                $tujuhHari[$tgl]['tepat_waktu']    = $tepat;
+                $tujuhHari[$tgl]['terlambat']      = $telat;
+                $tujuhHari[$tgl]['persentase']     = $pct;
+                $tujuhHari[$tgl]['height_percent'] = $height;
+                $tujuhHari[$tgl]['status_label']   = "{$hadir} Hadir ({$pct}%) &bull; {$tepat} Tepat Waktu, {$telat} Terlambat";
+            }
+        }
+
+        return array_values($tujuhHari);
+    }
+
+    /**
+     * Mengambil riwayat aktivitas presensi masuk terbaru hari ini untuk stream feed Admin
+     */
+    public function getAktivitasTerbaruHariIni(string $tanggal, int $limit = 6): array {
+        $stmt = $this->db->prepare("
+            SELECT p.id, p.user_id, p.tanggal, p.jam_masuk, p.jam_pulang, p.total_terlambat, p.foto_masuk,
+                   u.nama AS nama_pegawai, u.nik, u.jabatan, u.foto_profil,
+                   l.nama_lokasi
+            FROM `presensi` p
+            JOIN `users` u ON p.user_id = u.id
+            LEFT JOIN `lokasi_presensi` l ON p.lokasi_id = l.id
+            WHERE p.tanggal = ? AND p.jam_masuk IS NOT NULL
+            ORDER BY p.jam_masuk DESC
+            LIMIT " . (int)$limit . "
+        ");
+        $stmt->execute([$tanggal]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Jika hari ini belum ada aktivitas (misal pagi hari sebelum jam operasional), ambil presensi terakhir
+        if (empty($rows)) {
+            $stmtFallback = $this->db->prepare("
+                SELECT p.id, p.user_id, p.tanggal, p.jam_masuk, p.jam_pulang, p.total_terlambat, p.foto_masuk,
+                       u.nama AS nama_pegawai, u.nik, u.jabatan, u.foto_profil,
+                       l.nama_lokasi
+                FROM `presensi` p
+                JOIN `users` u ON p.user_id = u.id
+                LEFT JOIN `lokasi_presensi` l ON p.lokasi_id = l.id
+                WHERE p.jam_masuk IS NOT NULL
+                ORDER BY p.tanggal DESC, p.jam_masuk DESC
+                LIMIT " . (int)$limit . "
+            ");
+            $stmtFallback->execute();
+            $rows = $stmtFallback->fetchAll(PDO::FETCH_ASSOC);
+        }
+
+        return $rows;
+    }
 }
+
 

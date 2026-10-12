@@ -39,30 +39,73 @@ require_once __DIR__ . '/../layouts/header.php';
 <?php endif; ?>
 
 <div class="table-card">
-    <div class="table-toolbar">
-        <div class="table-toolbar-left">
-            <div class="table-toolbar-group">
-                <label for="sortLokasi" style="font-weight:600;">Urutkan:</label>
-                <select id="sortLokasi" class="table-sort-select" data-table="#lokasiTable">
-                    <option value="default">Default (Urutan Asli)</option>
+    <div class="looker-filter-bar" data-table="#lokasiTable">
+        <div class="looker-filter-bar-left">
+            <!-- Quick Search Input -->
+            <div class="looker-search-box">
+                <span class="looker-search-icon"><?= Icon::get('search', 14) ?></span>
+                <input type="text" class="looker-search-input" data-table="#lokasiTable" placeholder="Cari Lokasi...">
+            </div>
+
+            <!-- Sort Select -->
+            <div class="looker-sort-box">
+                <select class="table-sort-select" data-table="#lokasiTable">
+                    <option value="default">Urutkan: Default</option>
                     <option value="nama-asc">Nama Lokasi (A - Z)</option>
                     <option value="nama-desc">Nama Lokasi (Z - A)</option>
                     <option value="tipe-asc">Tipe Lokasi (A - Z)</option>
-                    <option value="radius-asc">Radius (Terkecil - Terbesar)</option>
-                    <option value="radius-desc">Radius (Terbesar - Terkecil)</option>
+                    <option value="radius-asc">Radius (Terkecil)</option>
+                    <option value="radius-desc">Radius (Terbesar)</option>
                 </select>
             </div>
-            <div class="table-toolbar-group">
-                <label for="filterTipeLokasi" style="font-weight:600;">Kategori / Tipe:</label>
-                <select id="filterTipeLokasi" class="table-filter-select" data-table="#lokasiTable" data-filter-col="tipe">
-                    <option value="">Semua Tipe</option>
-                    <option value="pusat">Pusat</option>
-                    <option value="cabang">Cabang</option>
-                </select>
+
+            <!-- Filter Pill: Tipe Lokasi -->
+            <div class="looker-pill-wrapper" data-table="#lokasiTable" data-filter-col="tipe" data-label="Tipe Lokasi">
+                <button type="button" class="looker-filter-pill">
+                    <span class="looker-pill-text">Tipe Lokasi</span>
+                    <span class="looker-pill-badge" style="display:none;"></span>
+                    <span class="looker-pill-caret">▼</span>
+                </button>
+                <div class="looker-popover">
+                    <div class="looker-popover-header">
+                        <label class="looker-select-all-label">
+                            <input type="checkbox" class="looker-select-all-input" checked> Pilih Semua
+                        </label>
+                    </div>
+                    <div class="looker-popover-search">
+                        <span class="looker-popover-search-icon"><?= Icon::get('search', 12) ?></span>
+                        <input type="text" class="looker-popover-input" placeholder="Cari tipe...">
+                    </div>
+                    <div class="looker-checklist">
+                        <label class="looker-check-item">
+                            <span class="looker-check-left">
+                                <input type="checkbox" value="pusat" checked>
+                                <span class="looker-check-label">Pusat</span>
+                            </span>
+                            <span class="looker-check-count"></span>
+                        </label>
+                        <label class="looker-check-item">
+                            <span class="looker-check-left">
+                                <input type="checkbox" value="cabang" checked>
+                                <span class="looker-check-label">Cabang</span>
+                            </span>
+                            <span class="looker-check-count"></span>
+                        </label>
+                    </div>
+                    <div class="looker-popover-footer">
+                        <span class="looker-footer-status">Semua dipilih</span>
+                        <button type="button" class="looker-clear-btn">Reset</button>
+                    </div>
+                </div>
             </div>
+
+            <!-- Reset All Button -->
+            <button type="button" class="looker-reset-all-btn" data-table="#lokasiTable" title="Reset semua filter">
+                <?= Icon::get('refresh-cw', 13) ?> Reset
+            </button>
         </div>
-        <div style="font-size:0.78rem; color:var(--text-muted);">
-            💡 Klik header kolom untuk urutkan instan
+        <div class="looker-filter-bar-right">
+            <span class="looker-row-count"></span>
         </div>
     </div>
     <div class="table-responsive">
@@ -160,7 +203,7 @@ require_once __DIR__ . '/../layouts/header.php';
 
 <!-- Modal Konfirmasi Hapus Lokasi (In-App Dialog - Bebas Pop-up Blocker) -->
 <div id="deleteLokasiModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalDeleteTitle">
-    <div class="modal-card">
+    <div class="modal-card modal-confirm">
         <div class="modal-icon-danger">
             <?= Icon::get('trash', 28) ?>
         </div>
@@ -184,7 +227,8 @@ require_once __DIR__ . '/../layouts/header.php';
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+(() => {
+function initDeleteLokasiModal() {
     const modal = document.getElementById('deleteLokasiModal');
     const form = document.getElementById('deleteLokasiForm');
     const inputId = document.getElementById('deleteModalLocationId');
@@ -227,12 +271,17 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Close on Escape key
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && modal.classList.contains('show')) {
-            closeModal();
-        }
-    });
+    // Close on Escape key (Single Guarded Listener)
+    if (!window._hasLokasiEscapeAttached) {
+        window._hasLokasiEscapeAttached = true;
+        document.addEventListener('keydown', function(e) {
+            const m = document.getElementById('deleteLokasiModal');
+            if (e.key === 'Escape' && m && m.classList.contains('show')) {
+                m.classList.remove('show');
+                document.body.style.overflow = '';
+            }
+        });
+    }
 
     // Prevent double submission
     if (form) {
@@ -241,7 +290,14 @@ document.addEventListener('DOMContentLoaded', function() {
             btnConfirmText.textContent = 'Menghapus...';
         });
     }
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDeleteLokasiModal);
+} else {
+    initDeleteLokasiModal();
+}
+})();
 </script>
 
 <?php require_once __DIR__ . '/../layouts/footer.php'; ?>

@@ -3,17 +3,35 @@
  * Database Migration & Seeder Script for Absensi Surya Gemilang Mojopahit (SGM)
  */
 
-$host = '127.0.0.1';
-$port = '3306';
-$username = 'root';
-$password = 'root';
-$dbname = 'absensi_sgm';
+if (php_sapi_name() !== 'cli') {
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=utf-8');
+    exit("Akses Ditolak: Skrip migrasi database hanya dapat dijalankan melalui Terminal (CLI).\n");
+}
+
+$host = getenv('TIDB_HOST') ?: (getenv('DB_HOST') ?: '127.0.0.1');
+$port = getenv('TIDB_PORT') ?: (getenv('DB_PORT') ?: '3306');
+$username = getenv('TIDB_USER') ?: (getenv('DB_USER') ?: 'root');
+$password = getenv('TIDB_PASSWORD') !== false && getenv('TIDB_PASSWORD') !== null ? getenv('TIDB_PASSWORD') : (getenv('DB_PASS') !== false ? getenv('DB_PASS') : 'root');
+$dbname = getenv('TIDB_DATABASE') ?: (getenv('DB_NAME') ?: 'absensi_sgm');
 
 try {
-    // 1. Connect without database to create database if not exists
-    $pdo = new PDO("mysql:host=$host;port=$port;charset=utf8mb4", $username, $password, [
+    // 1. Opsi koneksi PDO dengan deteksi SSL otomatis untuk Cloud DB (TiDB / Aiven)
+    $options = [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
-    ]);
+    ];
+    $isCloud = (getenv('DB_SSL') === 'true' || strpos($host, 'tidbcloud.com') !== false || strpos($host, 'aivencloud.com') !== false);
+    if ($isCloud) {
+        if (defined('PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT')) {
+            $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = false;
+        }
+        if (defined('PDO::MYSQL_ATTR_SSL_CA')) {
+            $options[PDO::MYSQL_ATTR_SSL_CA] = '';
+        }
+    }
+
+    // Connect without database to create database if not exists
+    $pdo = new PDO("mysql:host=$host;port=$port;charset=utf8mb4", $username, $password, $options);
     
     $pdo->exec("CREATE DATABASE IF NOT EXISTS `$dbname` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
     echo "Database `$dbname` ready.\n";
@@ -209,29 +227,74 @@ try {
             `uang_makan_harian` DECIMAL(12, 2) NOT NULL DEFAULT 25000.00,
             `tarif_lembur_per_jam` DECIMAL(12, 2) NOT NULL DEFAULT 25000.00,
             `potongan_alpa_per_hari` DECIMAL(12, 2) NOT NULL DEFAULT 100000.00,
+            `tarif_pengganti_libur_per_hari` DECIMAL(12, 2) NOT NULL DEFAULT 52000.00,
             `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
     echo "Table `pengaturan_gaji` ready.\n";
 
+    // Add tarif_pengganti_libur_per_hari to pengaturan_gaji if missing
+    $gajiCols = $pdo->query("SHOW COLUMNS FROM `pengaturan_gaji`")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('tarif_pengganti_libur_per_hari', $gajiCols)) {
+        $pdo->exec("ALTER TABLE `pengaturan_gaji` ADD COLUMN `tarif_pengganti_libur_per_hari` DECIMAL(12, 2) NOT NULL DEFAULT 52000.00 AFTER `potongan_alpa_per_hari`");
+        echo "Column `tarif_pengganti_libur_per_hari` added to pengaturan_gaji.\n";
+    }
+
     // Seed default pengaturan_gaji
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM `pengaturan_gaji`");
     $stmt->execute();
     if ($stmt->fetchColumn() == 0) {
         $pdo->exec("
-            INSERT INTO `pengaturan_gaji` (`jabatan`, `gaji_pokok`, `uang_makan_harian`, `tarif_lembur_per_jam`, `potongan_alpa_per_hari`) VALUES
-            ('Super Admin', 5500000.00, 35000.00, 35000.00, 150000.00),
-            ('IT Support', 4500000.00, 25000.00, 30000.00, 120000.00),
-            ('Finance & Accounting', 4800000.00, 30000.00, 30000.00, 120000.00),
-            ('Human Resource (HRD)', 4800000.00, 30000.00, 30000.00, 120000.00),
-            ('Staff Operasional', 3800000.00, 25000.00, 25000.00, 100000.00),
-            ('Pegawai', 3500000.00, 25000.00, 25000.00, 100000.00)
+            INSERT INTO `pengaturan_gaji` (`jabatan`, `gaji_pokok`, `uang_makan_harian`, `tarif_lembur_per_jam`, `potongan_alpa_per_hari`, `tarif_pengganti_libur_per_hari`) VALUES
+            ('Super Admin', 5500000.00, 35000.00, 35000.00, 150000.00, 52000.00),
+            ('IT Support', 4500000.00, 25000.00, 30000.00, 120000.00, 52000.00),
+            ('Finance & Accounting', 4800000.00, 30000.00, 30000.00, 120000.00, 52000.00),
+            ('Human Resource (HRD)', 4800000.00, 30000.00, 30000.00, 120000.00, 52000.00),
+            ('Staff Operasional', 3800000.00, 25000.00, 25000.00, 100000.00, 52000.00),
+            ('Pegawai', 3500000.00, 25000.00, 25000.00, 100000.00, 52000.00),
+            ('Koordinator', 1700000.00, 0.00, 20000.00, 52000.00, 52000.00),
+            ('Anggota', 1475000.00, 0.00, 20000.00, 52000.00, 52000.00)
         ");
         echo "Pengaturan gaji seeded.\n";
+    } else {
+        // Seed Koordinator & Anggota if not yet in pengaturan_gaji
+        $pdo->exec("
+            INSERT IGNORE INTO `pengaturan_gaji` (`jabatan`, `gaji_pokok`, `uang_makan_harian`, `tarif_lembur_per_jam`, `potongan_alpa_per_hari`, `tarif_pengganti_libur_per_hari`) VALUES
+            ('Koordinator', 1700000.00, 0.00, 20000.00, 52000.00, 52000.00),
+            ('Anggota', 1475000.00, 0.00, 20000.00, 52000.00, 52000.00)
+        ");
     }
 
-    // 10. Create table `pengaturan_sistem` (Google Spreadsheet URL & Webhook URL)
+    // Also add Koordinator and Anggota to `jabatan` table
+    $pdo->exec("
+        INSERT IGNORE INTO `jabatan` (`nama_jabatan`) VALUES
+        ('Koordinator'),
+        ('Anggota')
+    ");
+
+    // 9.5. Create table `payroll_penyesuaian` (Penyesuaian Bulanan: PL, Lain-lain, Catatan, Override)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `payroll_penyesuaian` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `user_id` INT NOT NULL,
+            `bulan` TINYINT NOT NULL,
+            `tahun` SMALLINT NOT NULL,
+            `pengganti_libur_hari` INT NOT NULL DEFAULT 0,
+            `lembur_jam_override` DECIMAL(5, 2) DEFAULT NULL,
+            `absen_hari_override` INT DEFAULT NULL,
+            `lain_lain_nominal` DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+            `keterangan` VARCHAR(255) DEFAULT NULL,
+            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY `uq_payroll_user_periode` (`user_id`, `bulan`, `tahun`),
+            INDEX `idx_payroll_periode` (`bulan`, `tahun`),
+            FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+    echo "Table `payroll_penyesuaian` ready.\n";
+
+    // 10. Create table `pengaturan_sistem` (Google Spreadsheet URL, Webhook, Signers)
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS `pengaturan_sistem` (
             `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -243,12 +306,67 @@ try {
     ");
     echo "Table `pengaturan_sistem` ready.\n";
 
-    // Seed spreadsheet URL
+    // Seed spreadsheet URL and default signers
     $stmt = $pdo->prepare("INSERT IGNORE INTO `pengaturan_sistem` (`kunci`, `nilai`) VALUES 
         ('spreadsheet_url', 'https://docs.google.com/spreadsheets/d/1P1f94UXfxIgrZPOE-i0LLDi0s8MAeoXQ-p26Ls4UEzY/edit?usp=sharing'),
-        ('spreadsheet_webhook_url', '')
+        ('spreadsheet_webhook_url', ''),
+        ('payroll_penandatangan_koordinator', 'Rian'),
+        ('payroll_penandatangan_supervisor', 'Supervisor Operasional'),
+        ('payroll_penandatangan_manajer', 'Manajer Operasional')
     ");
     $stmt->execute();
+
+    // 11. Create table `penugasan_lembur` (Surat Perintah Lembur)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `penugasan_lembur` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `nomor_sp_lembur` VARCHAR(50) NOT NULL UNIQUE,
+            `lokasi_id` INT NOT NULL,
+            `tanggal` DATE NOT NULL,
+            `jam_mulai` TIME NOT NULL DEFAULT '17:00:00',
+            `jam_selesai` TIME NOT NULL DEFAULT '20:00:00',
+            `maksimal_jam` DECIMAL(4, 2) NOT NULL DEFAULT 3.00,
+            `keterangan` TEXT NOT NULL,
+            `status` ENUM('aktif', 'selesai', 'dibatalkan') NOT NULL DEFAULT 'aktif',
+            `created_by` INT DEFAULT NULL,
+            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX `idx_lembur_tanggal_lokasi` (`tanggal`, `lokasi_id`),
+            INDEX `idx_lembur_status` (`status`),
+            FOREIGN KEY (`lokasi_id`) REFERENCES `lokasi_presensi`(`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+    echo "Table `penugasan_lembur` ready.\n";
+
+    // 12. Create table `penugasan_lembur_pegawai` (Pivot Pegawai Ditugaskan Lembur)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `penugasan_lembur_pegawai` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `penugasan_lembur_id` INT NOT NULL,
+            `user_id` INT NOT NULL,
+            `status` ENUM('ditugaskan', 'selesai', 'batal') NOT NULL DEFAULT 'ditugaskan',
+            `jam_lembur_aktual` DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
+            `catatan` VARCHAR(255) DEFAULT NULL,
+            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY `uq_penugasan_user` (`penugasan_lembur_id`, `user_id`),
+            INDEX `idx_plp_user_id` (`user_id`),
+            FOREIGN KEY (`penugasan_lembur_id`) REFERENCES `penugasan_lembur`(`id`) ON DELETE CASCADE,
+            FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+    echo "Table `penugasan_lembur_pegawai` ready.\n";
+
+    // 13. Create table `rate_limits` (Brute Force & DoS Flood Protection)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `rate_limits` (
+            `rate_key` VARCHAR(100) NOT NULL PRIMARY KEY,
+            `hits` INT NOT NULL DEFAULT 1,
+            `last_attempt` INT NOT NULL,
+            `expires_at` INT NOT NULL,
+            INDEX `idx_rate_limits_expires` (`expires_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+    echo "Table `rate_limits` ready.\n";
 
     echo "Migration completed successfully!\n";
 } catch (Exception $e) {

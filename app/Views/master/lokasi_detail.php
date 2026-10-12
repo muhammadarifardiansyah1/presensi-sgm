@@ -73,26 +73,62 @@ require_once __DIR__ . '/../layouts/header.php';
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    const lat = <?= (float)$lokasi['latitude'] ?>;
-    const lng = <?= (float)$lokasi['longitude'] ?>;
-    const radius = <?= (float)$lokasi['radius'] ?>;
+(() => {
+    let map = null;
 
-    const map = L.map('detail-map').setView([lat, lng], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
+    function cleanupMap() {
+        if (map) {
+            try { map.remove(); } catch(e) {}
+            map = null;
+        }
+        const container = document.getElementById('detail-map');
+        if (container && container._leaflet_id) {
+            delete container._leaflet_id;
+            container.innerHTML = '';
+        }
+    }
 
-    L.marker([lat, lng]).addTo(map)
-        .bindPopup("<b><?= htmlspecialchars($lokasi['nama_lokasi']) ?></b><br>Radius: " + radius + "m").openPopup();
+    function initDetailMap() {
+        const container = document.getElementById('detail-map');
+        if (!container) return;
 
-    L.circle([lat, lng], {
-        color: '#ef4444',
-        fillColor: '#f87171',
-        fillOpacity: 0.25,
-        radius: radius
-    }).addTo(map);
-});
+        cleanupMap();
+
+        const lat = <?= (float)$lokasi['latitude'] ?>;
+        const lng = <?= (float)$lokasi['longitude'] ?>;
+        const radius = <?= (float)$lokasi['radius'] ?>;
+
+        try {
+            map = L.map('detail-map').setView([lat, lng], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+        } catch(e) {
+            console.warn('Map initialization:', e);
+            return;
+        }
+
+        L.marker([lat, lng]).addTo(map)
+            .bindPopup("<b><?= htmlspecialchars($lokasi['nama_lokasi']) ?></b><br>Radius: " + radius + "m").openPopup();
+
+        L.circle([lat, lng], {
+            color: '#ef4444',
+            fillColor: '#f87171',
+            fillOpacity: 0.25,
+            radius: radius
+        }).addTo(map);
+    }
+
+    document.addEventListener('turbo:before-cache', cleanupMap);
+    document.addEventListener('turbo:before-visit', cleanupMap);
+    window.addEventListener('beforeunload', cleanupMap);
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initDetailMap);
+    } else {
+        initDetailMap();
+    }
+})();
 </script>
 
 <?php require_once __DIR__ . '/../layouts/footer.php'; ?>

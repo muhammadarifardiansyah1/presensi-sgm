@@ -25,18 +25,43 @@ $targetSheetName = "Rekap Absensi " . $periodeText;
     </div>
 
     <?php if (($currentUser['role'] ?? '') === 'admin'): ?>
-    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-        <!-- Buka Spreadsheet -->
-        <a href="<?= htmlspecialchars($spreadsheetUrl) ?>" target="_blank" rel="noopener noreferrer" class="btn" style="background: #0F9D58; color: #fff; display: inline-flex; align-items: center; gap: 6px;">
-            <?= Icon::get('external-link', 16) ?>
-            <span>Buka Spreadsheet</span>
-        </a>
+    <!-- Action Toolbar Groups -->
+    <div class="payroll-actions-toolbar">
+        <!-- Group 1: Spreadsheet Split Action Group -->
+        <div class="action-btn-group split-btn-group">
+            <button type="button" class="btn btn-blue" onclick="bukaModalSyncBulanan()" style="display: inline-flex; align-items: center; gap: 6px;">
+                <?= Icon::get('refresh', 16) ?>
+                <span>Sinkronkan</span>
+            </button>
+            <div class="dropdown">
+                <button type="button" class="btn btn-blue dropdown-toggle-btn" id="btnSpreadsheetDropdownBulanan" aria-haspopup="true" aria-expanded="false" title="Opsi Spreadsheet Lainnya">
+                    <?= Icon::get('chevron-down', 14) ?>
+                </button>
+                <div class="dropdown-menu dropdown-menu-right" style="min-width: 220px; padding: 6px;">
+                    <a href="<?= htmlspecialchars($spreadsheetUrl) ?>" target="_blank" rel="noopener noreferrer" class="dropdown-item" style="display: flex; align-items: center; gap: 10px;">
+                        <span style="color: #10b981; display: inline-flex;"><?= Icon::get('external-link', 16) ?></span>
+                        <div>
+                            <div style="font-weight: 600; font-size: 0.88rem;">Buka Spreadsheet</div>
+                            <div style="font-size: 0.74rem; color: var(--text-muted);">Lihat sheet hasil sinkronisasi</div>
+                        </div>
+                    </a>
+                    <div class="dropdown-divider" style="margin: 4px 0;"></div>
+                    <a href="javascript:void(0)" onclick="bukaModalPetunjukBulanan()" class="dropdown-item" style="display: flex; align-items: center; gap: 10px;">
+                        <span style="color: var(--warning, #f59e0b); display: inline-flex;"><?= Icon::get('file-text', 16) ?></span>
+                        <div>
+                            <div style="font-weight: 600; font-size: 0.88rem;">Panduan Webhook</div>
+                            <div style="font-size: 0.74rem; color: var(--text-muted);">Setup Google Apps Script</div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
 
-        <!-- Sinkronkan ke Spreadsheet -->
-        <button type="button" class="btn btn-blue" onclick="bukaModalSyncBulanan()" style="display: inline-flex; align-items: center; gap: 6px;">
-            <?= Icon::get('refresh', 16) ?>
-            <span>Sinkronkan ke Spreadsheet</span>
-        </button>
+        <!-- Group 2: Dokumen / Export Excel -->
+        <a href="<?= Config::baseUrl("laporan/export-excel?bulan={$bulanSelected}&tahun={$tahunSelected}") ?>" data-turbo="false" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 6px;" title="Export Rekap Bulanan ke Excel (.xlsx)">
+            <?= Icon::get('download', 16) ?>
+            <span>Export Excel</span>
+        </a>
     </div>
     <?php endif; ?>
 </div>
@@ -67,18 +92,14 @@ $targetSheetName = "Rekap Absensi " . $periodeText;
     <?php unset($_SESSION['sync_error']); ?>
 <?php endif; ?>
 
-<!-- Filter Bar & Export Actions (Screenshot 5) -->
-<div class="form-card" style="padding: 16px 20px; margin-bottom: 24px;">
-    <form method="GET" action="<?= Config::baseUrl('laporan/bulanan') ?>" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-        <?php if ($currentUser['role'] === 'admin'): ?>
-            <a href="<?= Config::baseUrl("laporan/export-excel?bulan={$bulanSelected}&tahun={$tahunSelected}") ?>" class="btn btn-blue">
-                Export Excel
-            </a>
-        <?php endif; ?>
-
-        <div style="min-width: 170px;">
-            <select name="bulan" class="form-select">
-                <option value="">-- Pilih Bulan --</option>
+<!-- Filter Periode Bulan & Tahun -->
+<div class="form-card" style="padding: 14px 20px; margin-bottom: 24px;">
+    <form method="GET" action="<?= Config::baseUrl('laporan/bulanan') ?>" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <label for="pilihBulanBulanan" style="font-weight: 600; font-size: 0.88rem; color: var(--text-main); display: inline-flex; align-items: center; gap: 6px;">
+                <?= Icon::get('calendar', 15) ?> Bulan:
+            </label>
+            <select name="bulan" id="pilihBulanBulanan" class="form-input" style="min-width: 140px; padding: 7px 12px;">
                 <?php foreach ($namaBulan as $num => $nama): ?>
                     <option value="<?= $num ?>" <?= ($bulanSelected === $num) ? 'selected' : '' ?>>
                         <?= $nama ?>
@@ -87,10 +108,12 @@ $targetSheetName = "Rekap Absensi " . $periodeText;
             </select>
         </div>
 
-        <div style="min-width: 140px;">
-            <select name="tahun" class="form-select">
-                <option value="">-- Pilih Tahun --</option>
-                <?php for ($y = date('Y'); $y >= date('Y') - 5; $y--): ?>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <label for="pilihTahunBulanan" style="font-weight: 600; font-size: 0.88rem; color: var(--text-main);">Tahun:</label>
+            <select name="tahun" id="pilihTahunBulanan" class="form-input" style="min-width: 105px; padding: 7px 12px;">
+                <?php 
+                $curYear = (int)date('Y');
+                for ($y = $curYear; $y >= $curYear - 5; $y--): ?>
                     <option value="<?= $y ?>" <?= ($tahunSelected === $y) ? 'selected' : '' ?>>
                         <?= $y ?>
                     </option>
@@ -98,16 +121,13 @@ $targetSheetName = "Rekap Absensi " . $periodeText;
             </select>
         </div>
 
-        <button type="submit" class="btn btn-blue">Tampilkan</button>
-        <a href="<?= Config::baseUrl('laporan/bulanan') ?>" class="btn btn-success">Refresh</a>
+        <button type="submit" class="btn btn-blue" style="padding: 7px 18px; font-weight: 600; font-size: 0.88rem; display: inline-flex; align-items: center; gap: 6px;">
+            <?= Icon::get('search', 14) ?> <span>Tampilkan</span>
+        </button>
 
-        <?php if (($currentUser['role'] ?? '') === 'admin'): ?>
-            <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
-                <button type="button" class="btn btn-sm btn-outline-info" onclick="bukaModalPetunjukBulanan()" style="border: 1px dashed var(--accent-color); color: var(--accent-color);">
-                    💡 Panduan Webhook Spreadsheet
-                </button>
-            </div>
-        <?php endif; ?>
+        <a href="<?= Config::baseUrl('laporan/bulanan') ?>" class="btn btn-secondary" style="padding: 7px 14px; font-size: 0.88rem;">
+            Bulan Ini
+        </a>
     </form>
 </div>
 
@@ -117,12 +137,18 @@ $targetSheetName = "Rekap Absensi " . $periodeText;
 </div>
 
 <div class="table-card">
-    <div class="table-toolbar">
-        <div class="table-toolbar-left">
-            <div class="table-toolbar-group">
-                <label for="sortBulanan" style="font-weight:600;">Urutkan:</label>
-                <select id="sortBulanan" class="table-sort-select" data-table="#rekapBulananTable">
-                    <option value="default">Default (Urutan Asli)</option>
+    <div class="looker-filter-bar" data-table="#rekapBulananTable">
+        <div class="looker-filter-bar-left">
+            <!-- Quick Search Input -->
+            <div class="looker-search-box">
+                <span class="looker-search-icon"><?= Icon::get('search', 14) ?></span>
+                <input type="text" class="looker-search-input" data-table="#rekapBulananTable" placeholder="Cari Nama Pegawai...">
+            </div>
+
+            <!-- Sort Select -->
+            <div class="looker-sort-box">
+                <select class="table-sort-select" data-table="#rekapBulananTable">
+                    <option value="default">Urutkan: Default</option>
                     <option value="tanggal-desc">Tanggal (Terbaru)</option>
                     <option value="tanggal-asc">Tanggal (Terlama)</option>
                     <option value="nama-asc">Nama Pegawai (A - Z)</option>
@@ -133,17 +159,54 @@ $targetSheetName = "Rekap Absensi " . $periodeText;
                     <option value="terlambat-desc">Keterlambatan (Paling Lama)</option>
                 </select>
             </div>
-            <div class="table-toolbar-group">
-                <label for="filterKetBulanan" style="font-weight:600;">Kategori:</label>
-                <select id="filterKetBulanan" class="table-filter-select" data-table="#rekapBulananTable" data-filter-col="terlambat">
-                    <option value="">Semua Kategori</option>
-                    <option value="tepat">Tepat Waktu</option>
-                    <option value="terlambat">Terlambat</option>
-                </select>
+
+            <!-- Filter Pill: Keterlambatan -->
+            <div class="looker-pill-wrapper" data-table="#rekapBulananTable" data-filter-col="terlambat" data-label="Ketepatan Waktu">
+                <button type="button" class="looker-filter-pill">
+                    <span class="looker-pill-text">Ketepatan Waktu</span>
+                    <span class="looker-pill-badge" style="display:none;"></span>
+                    <span class="looker-pill-caret">▼</span>
+                </button>
+                <div class="looker-popover">
+                    <div class="looker-popover-header">
+                        <label class="looker-select-all-label">
+                            <input type="checkbox" class="looker-select-all-input" checked> Pilih Semua
+                        </label>
+                    </div>
+                    <div class="looker-popover-search">
+                        <span class="looker-popover-search-icon"><?= Icon::get('search', 12) ?></span>
+                        <input type="text" class="looker-popover-input" placeholder="Cari status...">
+                    </div>
+                    <div class="looker-checklist">
+                        <label class="looker-check-item">
+                            <span class="looker-check-left">
+                                <input type="checkbox" value="tepat" checked>
+                                <span class="looker-check-label">Tepat Waktu</span>
+                            </span>
+                            <span class="looker-check-count"></span>
+                        </label>
+                        <label class="looker-check-item">
+                            <span class="looker-check-left">
+                                <input type="checkbox" value="terlambat" checked>
+                                <span class="looker-check-label">Terlambat</span>
+                            </span>
+                            <span class="looker-check-count"></span>
+                        </label>
+                    </div>
+                    <div class="looker-popover-footer">
+                        <span class="looker-footer-status">Semua dipilih</span>
+                        <button type="button" class="looker-clear-btn">Reset</button>
+                    </div>
+                </div>
             </div>
+
+            <!-- Reset All Button -->
+            <button type="button" class="looker-reset-all-btn" data-table="#rekapBulananTable" title="Reset semua filter">
+                <?= Icon::get('refresh-cw', 13) ?> Reset
+            </button>
         </div>
-        <div style="font-size:0.78rem; color:var(--text-muted);">
-            💡 Klik header kolom untuk urutkan instan
+        <div class="looker-filter-bar-right">
+            <span class="looker-row-count"></span>
         </div>
     </div>
     <div class="table-responsive">
@@ -187,8 +250,8 @@ $targetSheetName = "Rekap Absensi " . $periodeText;
                             </td>
                             <td style="text-align: center;">
                                 <?php if (!empty($row['foto_masuk'])): ?>
-                                    <a href="<?= Config::baseUrl('assets/images/uploads/presensi/' . $row['foto_masuk']) ?>" target="_blank" title="Lihat Foto Masuk">
-                                        <img src="<?= Config::baseUrl('assets/images/uploads/presensi/' . $row['foto_masuk']) ?>" class="img-thumb-table" alt="Foto Masuk">
+                                    <a href="<?= ImageHelper::getPhotoUrl($row['foto_masuk'], 'presensi') ?>" target="_blank" title="Lihat Foto Masuk">
+                                        <img src="<?= ImageHelper::getPhotoUrl($row['foto_masuk'], 'presensi') ?>" class="img-thumb-table" alt="Foto Masuk">
                                     </a>
                                 <?php else: ?>
                                     <span style="color:var(--text-subtle);">-</span>
@@ -199,8 +262,8 @@ $targetSheetName = "Rekap Absensi " . $periodeText;
                             </td>
                             <td style="text-align: center;">
                                 <?php if (!empty($row['foto_keluar'])): ?>
-                                    <a href="<?= Config::baseUrl('assets/images/uploads/presensi/' . $row['foto_keluar']) ?>" target="_blank" title="Lihat Foto Keluar">
-                                        <img src="<?= Config::baseUrl('assets/images/uploads/presensi/' . $row['foto_keluar']) ?>" class="img-thumb-table" alt="Foto Keluar">
+                                    <a href="<?= ImageHelper::getPhotoUrl($row['foto_keluar'], 'presensi') ?>" target="_blank" title="Lihat Foto Keluar">
+                                        <img src="<?= ImageHelper::getPhotoUrl($row['foto_keluar'], 'presensi') ?>" class="img-thumb-table" alt="Foto Keluar">
                                     </a>
                                 <?php else: ?>
                                     <span style="color:var(--text-subtle);">-</span>
@@ -231,7 +294,10 @@ $targetSheetName = "Rekap Absensi " . $periodeText;
                                         </button>
                                         <a href="<?= Config::baseUrl('laporan/hapus-presensi?id=' . (int)$row['id']) ?>" 
                                            class="btn btn-danger btn-sm" 
-                                           onclick="return confirm('Apakah Anda yakin ingin menghapus data presensi ini? Pegawai akan dapat melakukan presensi ulang.');"
+                                           data-confirm="Apakah Anda yakin ingin menghapus catatan presensi ini? Pegawai akan dapat melakukan presensi ulang untuk tanggal ini."
+                                           data-confirm-title="Hapus / Reset Presensi Pegawai"
+                                           data-confirm-type="danger"
+                                           data-confirm-btn="Ya, Hapus Presensi"
                                            title="Hapus / Reset Presensi">
                                             <?= Icon::get('trash', 14) ?>
                                         </a>
@@ -751,7 +817,11 @@ function salinKodeScriptBulanan() {
         }
     }).catch(function() {
         document.execCommand('copy');
-        alert('Kode Apps Script berhasil disalin ke clipboard!');
+        if (window.SGMDialog) {
+            window.SGMDialog.toast('Kode Apps Script berhasil disalin ke clipboard!', 'success');
+        } else {
+            alert('Kode Apps Script berhasil disalin ke clipboard!');
+        }
     });
 }
 
@@ -774,13 +844,21 @@ function bukaModalEditPresensi(id) {
                 document.getElementById('edit_jam_lembur').value = data.jam_lembur || 0;
                 document.getElementById('edit_keterangan_admin').value = data.keterangan_admin || '';
             } else {
-                alert('Gagal mengambil data presensi');
+                if (window.SGMDialog) {
+                    window.SGMDialog.toast('Gagal mengambil data presensi', 'danger');
+                } else {
+                    alert('Gagal mengambil data presensi');
+                }
                 tutupModalEditPresensi();
             }
         })
         .catch(err => {
             console.error(err);
-            alert('Terjadi kesalahan koneksi');
+            if (window.SGMDialog) {
+                window.SGMDialog.toast('Terjadi kesalahan koneksi ke server', 'danger');
+            } else {
+                alert('Terjadi kesalahan koneksi');
+            }
             tutupModalEditPresensi();
         });
 }

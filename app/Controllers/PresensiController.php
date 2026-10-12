@@ -8,7 +8,10 @@ require_once __DIR__ . '/../Config/Config.php';
 require_once __DIR__ . '/AuthController.php';
 require_once __DIR__ . '/../Models/Presensi.php';
 require_once __DIR__ . '/../Models/Lokasi.php';
+require_once __DIR__ . '/../Models/Ketidakhadiran.php';
 require_once __DIR__ . '/../Helpers/ImageHelper.php';
+require_once __DIR__ . '/../Helpers/RateLimiter.php';
+require_once __DIR__ . '/../Helpers/GoogleSyncHelper.php';
 
 class PresensiController {
     private Presensi $presensiModel;
@@ -50,16 +53,22 @@ class PresensiController {
         return 'Tepat Waktu';
     }
 
-    private function calculateWorkDuration(string $jamMasuk, string $jamPulang): string {
-        $tMasuk = strtotime($jamMasuk);
-        $tPulang = strtotime($jamPulang);
-        if ($tPulang > $tMasuk) {
-            $diff = $tPulang - $tMasuk;
-            $hours = floor($diff / 3600);
-            $minutes = floor(($diff % 3600) / 60);
-            return "{$hours} jam {$minutes} menit";
-        }
-        return '0 jam 0 menit';
+    private function calculateWorkDuration(
+        string $jamMasuk, 
+        string $jamPulang, 
+        ?string $tanggal = null, 
+        ?string $jamPulangStandar = '17:00:00', 
+        float $jamLembur = 0.00
+    ): string {
+        $tanggal = $tanggal ?: date('Y-m-d');
+        $calc = $this->presensiModel->calculateCappedDuration(
+            $tanggal,
+            $jamMasuk,
+            $jamPulang,
+            $jamPulangStandar,
+            $jamLembur
+        );
+        return $calc['format'];
     }
 
     public function masuk(): void {
@@ -91,6 +100,21 @@ class PresensiController {
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Content-Type: application/json');
+
+            // Proteksi Rate Limiting & Anti-Spam (Max 5 request per 30 detik per user)
+            $userId = (int)$currentUser['id'];
+            $rateKey = 'presensi:user:' . $userId;
+            if (RateLimiter::tooManyAttempts($rateKey, 5)) {
+                $seconds = RateLimiter::availableIn($rateKey);
+                http_response_code(429);
+                header('Retry-After: ' . $seconds);
+                echo json_encode([
+                    'status' => 'error',
+                    'message' => "Terlalu banyak permintaan presensi. Mohon tunggu {$seconds} detik sebelum mencoba kembali."
+                ]);
+                exit;
+            }
+            RateLimiter::hit($rateKey, 30);
 
             $fotoBase64 = $_POST['image'] ?? '';
             $lat        = (float) ($_POST['latitude'] ?? 0);
@@ -127,23 +151,50 @@ class PresensiController {
                 exit;
             }
 
-            // Simpan foto
+            // 1. Simpan foto lokal sebagai cadangan
             $filename = $this->saveBase64Image($fotoBase64, 'masuk_' . $currentUser['id']);
-            if (!$filename) {
-                echo json_encode(['status' => 'error', 'message' => 'Gagal memproses foto presensi!']);
-                exit;
-            }
 
             $jamMasuk = date('H:i:s');
             $terlambat = $this->calculateLateness($jamMasuk, $lokasi['jam_masuk'] ?? '08:00:00');
             $status = ($terlambat === 'Tepat Waktu') ? 'hadir' : 'terlambat';
+
+            // 2. Sinkronisasi Real-Time ke Google Spreadsheet & Upload ke Google Drive jika webhook aktif
+            $finalFoto = $filename;
+            if (GoogleSyncHelper::isConfigured()) {
+                $syncResult = GoogleSyncHelper::syncAttendance([
+                    'tipe'        => 'masuk',
+                    'user_id'     => $currentUser['id'],
+                    'nik'         => $currentUser['nik'] ?? '-',
+                    'nama'        => $currentUser['nama'] ?? '-',
+                    'jabatan'     => $currentUser['jabatan'] ?? '-',
+                    'lokasi'      => $lokasi['nama_lokasi'] ?? '-',
+                    'tanggal'     => $today,
+                    'jam_masuk'   => $jamMasuk,
+                    'status'      => $status,
+                    'terlambat'   => $terlambat,
+                    'latitude'    => $lat,
+                    'longitude'   => $long,
+                    'jarak'       => $jarak,
+                    'image_base64'=> $fotoBase64,
+                    'filename'    => 'masuk_' . ($currentUser['nik'] ?? $currentUser['id']) . '_' . date('Ymd_His')
+                ]);
+
+                if (!empty($syncResult['drive_url'])) {
+                    $finalFoto = $syncResult['drive_url'];
+                }
+            }
+
+            if (empty($finalFoto) && !$filename) {
+                echo json_encode(['status' => 'error', 'message' => 'Gagal memproses foto presensi!']);
+                exit;
+            }
 
             $sukses = $this->presensiModel->absenMasuk(
                 $currentUser['id'],
                 $lokasi['id'],
                 $today,
                 $jamMasuk,
-                $filename,
+                $finalFoto,
                 $lat,
                 $long,
                 $jarak,
@@ -198,6 +249,21 @@ class PresensiController {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Content-Type: application/json');
 
+            // Proteksi Rate Limiting & Anti-Spam (Max 5 request per 30 detik per user)
+            $userId = (int)$currentUser['id'];
+            $rateKey = 'presensi:user:' . $userId;
+            if (RateLimiter::tooManyAttempts($rateKey, 5)) {
+                $seconds = RateLimiter::availableIn($rateKey);
+                http_response_code(429);
+                header('Retry-After: ' . $seconds);
+                echo json_encode([
+                    'status' => 'error',
+                    'message' => "Terlalu banyak permintaan presensi. Mohon tunggu {$seconds} detik sebelum mencoba kembali."
+                ]);
+                exit;
+            }
+            RateLimiter::hit($rateKey, 30);
+
             $fotoBase64 = $_POST['image'] ?? '';
             $lat        = (float) ($_POST['latitude'] ?? 0);
             $long       = (float) ($_POST['longitude'] ?? 0);
@@ -237,19 +303,60 @@ class PresensiController {
                 exit;
             }
 
+            // 1. Simpan foto lokal sebagai cadangan
             $filename = $this->saveBase64Image($fotoBase64, 'keluar_' . $currentUser['id']);
-            if (!$filename) {
+
+            $jamPulang = date('H:i:s');
+            $jamPulangStandar = '17:00:00';
+            if (!empty($currentUser['lokasi_id'])) {
+                $lok = $this->lokasiModel->findById((int)$currentUser['lokasi_id']);
+                if ($lok && !empty($lok['jam_pulang'])) {
+                    $jamPulangStandar = $lok['jam_pulang'];
+                }
+            }
+            $totalJam = $this->calculateWorkDuration(
+                $presensiHariIni['jam_masuk'], 
+                $jamPulang, 
+                $today, 
+                $jamPulangStandar
+            );
+
+            // 2. Sinkronisasi Real-Time ke Google Spreadsheet & Upload ke Google Drive
+            $finalFoto = $filename;
+            if (GoogleSyncHelper::isConfigured()) {
+                $syncResult = GoogleSyncHelper::syncAttendance([
+                    'tipe'            => 'pulang',
+                    'user_id'         => $currentUser['id'],
+                    'nik'             => $currentUser['nik'] ?? '-',
+                    'nama'            => $currentUser['nama'] ?? '-',
+                    'jabatan'         => $currentUser['jabatan'] ?? '-',
+                    'lokasi'          => $lokasi['nama_lokasi'] ?? '-',
+                    'tanggal'         => $today,
+                    'jam_masuk'       => $presensiHariIni['jam_masuk'] ?? '-',
+                    'jam_pulang'      => $jamPulang,
+                    'total_jam_kerja' => $totalJam,
+                    'status'          => $presensiHariIni['status_kehadiran'] ?? 'hadir',
+                    'latitude'        => $lat,
+                    'longitude'       => $long,
+                    'jarak'           => $jarak,
+                    'image_base64'    => $fotoBase64,
+                    'filename'        => 'pulang_' . ($currentUser['nik'] ?? $currentUser['id']) . '_' . date('Ymd_His')
+                ]);
+
+                if (!empty($syncResult['drive_url'])) {
+                    $finalFoto = $syncResult['drive_url'];
+                }
+            }
+
+            if (empty($finalFoto) && !$filename) {
                 echo json_encode(['status' => 'error', 'message' => 'Gagal memproses foto presensi!']);
                 exit;
             }
 
-            $jamPulang = date('H:i:s');
-            $totalJam = $this->calculateWorkDuration($presensiHariIni['jam_masuk'], $jamPulang);
-
             $sukses = $this->presensiModel->absenKeluar(
                 $presensiHariIni['id'],
                 $jamPulang,
-                $filename,
+                $finalFoto,
                 $lat,
                 $long,
                 $jarak,
@@ -278,5 +385,26 @@ class PresensiController {
         }
 
         require_once __DIR__ . '/../Views/presensi/keluar.php';
+    }
+
+    /**
+     * Halaman Mandiri: Riwayat Aktivitas & Kehadiran Pegawai
+     */
+    public function riwayat(): void {
+        $currentUser = AuthController::checkAuth();
+        $userId = (int)$currentUser['id'];
+
+        $bulan = isset($_GET['bulan']) && $_GET['bulan'] !== '' ? (int)$_GET['bulan'] : (int)date('m');
+        $tahun = isset($_GET['tahun']) && $_GET['tahun'] !== '' ? (int)$_GET['tahun'] : (int)date('Y');
+        $tipe  = isset($_GET['tipe']) ? trim($_GET['tipe']) : 'semua';
+
+        // Ambil data riwayat lengkap
+        $riwayatList = $this->presensiModel->getAllRiwayatPegawai($userId, $bulan, $tahun, $tipe);
+
+        // Ambil statistik ringkas untuk header kartu
+        $statBulanan = $this->presensiModel->getStatistikBulananPegawai($userId, $bulan, $tahun);
+        $statIzin = (new Ketidakhadiran())->countStatistikPegawai($userId, $bulan, $tahun);
+
+        require_once __DIR__ . '/../Views/presensi/riwayat.php';
     }
 }

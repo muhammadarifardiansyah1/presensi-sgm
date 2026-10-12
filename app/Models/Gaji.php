@@ -38,7 +38,8 @@ class Gaji {
             'gaji_pokok' => 3500000.00,
             'uang_makan_harian' => 25000.00,
             'tarif_lembur_per_jam' => 25000.00,
-            'potongan_alpa_per_hari' => 100000.00
+            'potongan_alpa_per_hari' => 100000.00,
+            'tarif_pengganti_libur_per_hari' => 52000.00
         ];
     }
 
@@ -47,20 +48,22 @@ class Gaji {
      */
     public function savePengaturan(array $data): bool {
         $stmt = $this->db->prepare("
-            INSERT INTO `pengaturan_gaji` (`jabatan`, `gaji_pokok`, `uang_makan_harian`, `tarif_lembur_per_jam`, `potongan_alpa_per_hari`)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO `pengaturan_gaji` (`jabatan`, `gaji_pokok`, `uang_makan_harian`, `tarif_lembur_per_jam`, `potongan_alpa_per_hari`, `tarif_pengganti_libur_per_hari`)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 `gaji_pokok` = VALUES(`gaji_pokok`),
                 `uang_makan_harian` = VALUES(`uang_makan_harian`),
                 `tarif_lembur_per_jam` = VALUES(`tarif_lembur_per_jam`),
-                `potongan_alpa_per_hari` = VALUES(`potongan_alpa_per_hari`)
+                `potongan_alpa_per_hari` = VALUES(`potongan_alpa_per_hari`),
+                `tarif_pengganti_libur_per_hari` = VALUES(`tarif_pengganti_libur_per_hari`)
         ");
         return $stmt->execute([
             $data['jabatan'],
             (float)($data['gaji_pokok'] ?? 3500000),
             (float)($data['uang_makan_harian'] ?? 25000),
             (float)($data['tarif_lembur_per_jam'] ?? 25000),
-            (float)($data['potongan_alpa_per_hari'] ?? 100000)
+            (float)($data['potongan_alpa_per_hari'] ?? 100000),
+            (float)($data['tarif_pengganti_libur_per_hari'] ?? 52000)
         ]);
     }
 
@@ -87,7 +90,7 @@ class Gaji {
 
         // Fetch users
         $sqlUsers = "
-            SELECT u.id, u.nik, u.nama, u.jabatan, u.role, l.nama_lokasi 
+            SELECT u.id, u.nik, u.nama, u.jenis_kelamin, u.jabatan, u.role, l.nama_lokasi 
             FROM `users` u 
             LEFT JOIN `lokasi_presensi` l ON u.lokasi_id = l.id 
             WHERE u.`status` = 'aktif'
@@ -164,6 +167,26 @@ class Gaji {
             $izinMap[(int)$iz['user_id']][] = $iz;
         }
 
+        // 3. Batch Query Penyesuaian Payroll bulanan (PL, override, lain-lain) - 1 query tunggal
+        $sqlPen = "
+            SELECT user_id, pengganti_libur_hari, lembur_jam_override, absen_hari_override, lain_lain_nominal, keterangan
+            FROM `payroll_penyesuaian`
+            WHERE bulan = ? AND tahun = ?
+        ";
+        $paramsPen = [$bulan, $tahun];
+        if ($userId !== null) {
+            $sqlPen .= " AND user_id = ?";
+            $paramsPen[] = $userId;
+        }
+        $stmtPen = $this->db->prepare($sqlPen);
+        $stmtPen->execute($paramsPen);
+        $penRows = $stmtPen->fetchAll();
+
+        $penMap = [];
+        foreach ($penRows as $pr) {
+            $penMap[(int)$pr['user_id']] = $pr;
+        }
+
         $results = [];
 
         foreach ($users as $user) {
@@ -202,25 +225,51 @@ class Gaji {
             $totalTidakMasukIzin = $sakitDays + $izinDays + $cutiDays;
             $alpaDays = max(0, $totalHariKerjaBulan - ($totalHadir + $totalTidakMasukIzin));
 
-            // 4. Financial Calculations
+            // 4. Data Penyesuaian Bulanan (RSUD Basoeni)
+            $pData = $penMap[$uId] ?? null;
+            $penggantiLiburHari = (int)($pData['pengganti_libur_hari'] ?? 0);
+            $lainLainNominal = (float)($pData['lain_lain_nominal'] ?? 0.00);
+            $keteranganPenyesuaian = $pData['keterangan'] ?? '';
+
+            // Override jika admin menentukan angka khusus
+            $absenOverride = (isset($pData['absen_hari_override']) && $pData['absen_hari_override'] !== null && $pData['absen_hari_override'] !== '')
+                ? (int)$pData['absen_hari_override']
+                : null;
+            $finalAbsenDays = ($absenOverride !== null) ? $absenOverride : $alpaDays;
+
+            $lemburOverride = (isset($pData['lembur_jam_override']) && $pData['lembur_jam_override'] !== null && $pData['lembur_jam_override'] !== '')
+                ? (float)$pData['lembur_jam_override']
+                : null;
+            $finalJamLembur = ($lemburOverride !== null) ? $lemburOverride : $totalJamLembur;
+
+            // 5. Financial Calculations
             $gajiPokok = (float)($rates['gaji_pokok'] ?? 3500000);
-            $uangMakanHarian = (float)($rates['uang_makan_harian'] ?? 25000);
-            $tarifLembur = (float)($rates['tarif_lembur_per_jam'] ?? 25000);
-            $dendaAlpa = (float)($rates['potongan_alpa_per_hari'] ?? 100000);
+            $uangMakanHarian = (float)($rates['uang_makan_harian'] ?? 0);
+            $tarifLembur = (float)($rates['tarif_lembur_per_jam'] ?? 20000);
+            $dendaAlpa = (float)($rates['potongan_alpa_per_hari'] ?? 52000);
+            $tarifPenggantiLibur = (float)($rates['tarif_pengganti_libur_per_hari'] ?? 52000);
 
             $totalUangMakan = $totalHadir * $uangMakanHarian;
-            $totalUangLembur = round($totalJamLembur * $tarifLembur);
-            $totalPotonganAlpa = $alpaDays * $dendaAlpa;
+            $totalPenggantiLibur = $penggantiLiburHari * $tarifPenggantiLibur;
+            $totalUangLembur = round($finalJamLembur * $tarifLembur);
+            $totalPotonganAlpa = $finalAbsenDays * $dendaAlpa;
 
-            $totalPenerimaan = $gajiPokok + $totalUangMakan + $totalUangLembur;
+            // Rumus Total Gaji RSUD Basoeni:
+            // Gaji Pokok + Uang Makan + Pengganti Libur - Potongan Absen + Uang Lembur + Lain-Lain
+            $totalPenerimaan = $gajiPokok + $totalUangMakan + $totalPenggantiLibur + $totalUangLembur + $lainLainNominal;
             $totalPotongan = $totalPotonganAlpa;
             $takeHomePay = max(0, $totalPenerimaan - $totalPotongan);
+
+            $gender = $user['jenis_kelamin'] ?? 'Laki-laki';
+            $statusGender = (strtolower($gender) === 'perempuan') ? 'P' : 'L';
 
             $results[] = [
                 'id' => $uId,
                 'user_id' => $uId,
                 'nik' => $user['nik'],
                 'nama' => $user['nama'],
+                'jenis_kelamin' => $gender,
+                'status_gender' => $statusGender,
                 'jabatan' => $user['jabatan'],
                 'nama_lokasi' => $user['nama_lokasi'] ?? 'Kantor SGM',
                 'hari_kerja_sebulan' => $totalHariKerjaBulan,
@@ -230,8 +279,16 @@ class Gaji {
                 'sakit' => $sakitDays,
                 'izin' => $izinDays,
                 'cuti' => $cutiDays,
-                'alpa' => $alpaDays,
-                'jam_lembur' => $totalJamLembur,
+                'alpa_sistem' => $alpaDays,
+                'alpa' => $finalAbsenDays,
+                'absen_hari_override' => $absenOverride,
+                'jam_lembur_sistem' => $totalJamLembur,
+                'jam_lembur' => $finalJamLembur,
+                'lembur_jam_override' => $lemburOverride,
+                'pengganti_libur_hari' => $penggantiLiburHari,
+                'uang_pengganti_libur' => $totalPenggantiLibur,
+                'lain_lain' => $lainLainNominal,
+                'keterangan_penyesuaian' => $keteranganPenyesuaian,
                 // Finansial
                 'gaji_pokok' => $gajiPokok,
                 'uang_makan' => $totalUangMakan,
@@ -245,15 +302,88 @@ class Gaji {
                     'gaji_pokok' => $gajiPokok,
                     'uang_makan_harian' => $uangMakanHarian,
                     'tarif_lembur_per_jam' => $tarifLembur,
-                    'potongan_alpa_per_hari' => $dendaAlpa
+                    'potongan_alpa_per_hari' => $dendaAlpa,
+                    'tarif_pengganti_libur_per_hari' => $tarifPenggantiLibur
                 ],
                 'tarif_lembur' => $tarifLembur,
                 'uang_makan_harian' => $uangMakanHarian,
-                'denda_alpa_harian' => $dendaAlpa
+                'denda_alpa_harian' => $dendaAlpa,
+                'tarif_pengganti_libur' => $tarifPenggantiLibur
             ];
         }
 
         return $results;
+    }
+
+    /**
+     * Ambil seluruh data penyesuaian payroll periode tertentu
+     */
+    public function getPenyesuaianByPeriode(int $bulan, int $tahun): array {
+        $stmt = $this->db->prepare("
+            SELECT * FROM `payroll_penyesuaian` 
+            WHERE `bulan` = ? AND `tahun` = ?
+        ");
+        $stmt->execute([$bulan, $tahun]);
+        $rows = $stmt->fetchAll();
+        $map = [];
+        foreach ($rows as $r) {
+            $map[(int)$r['user_id']] = $r;
+        }
+        return $map;
+    }
+
+    /**
+     * Batch simpan penyesuaian payroll dengan 1 PDO Transaction (Super Cepat & Aman)
+     */
+    public function saveBatchPenyesuaian(int $bulan, int $tahun, array $rows): bool {
+        try {
+            $this->db->beginTransaction();
+            $stmt = $this->db->prepare("
+                INSERT INTO `payroll_penyesuaian` 
+                    (`user_id`, `bulan`, `tahun`, `pengganti_libur_hari`, `lembur_jam_override`, `absen_hari_override`, `lain_lain_nominal`, `keterangan`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    `pengganti_libur_hari` = VALUES(`pengganti_libur_hari`),
+                    `lembur_jam_override` = VALUES(`lembur_jam_override`),
+                    `absen_hari_override` = VALUES(`absen_hari_override`),
+                    `lain_lain_nominal` = VALUES(`lain_lain_nominal`),
+                    `keterangan` = VALUES(`keterangan`),
+                    `updated_at` = CURRENT_TIMESTAMP
+            ");
+
+            foreach ($rows as $userId => $item) {
+                $pl = max(0, (int)($item['pengganti_libur_hari'] ?? 0));
+                $lain = (float)($item['lain_lain_nominal'] ?? 0.00);
+                $ket = trim($item['keterangan'] ?? '');
+                
+                $lemburOverride = (isset($item['lembur_jam_override']) && $item['lembur_jam_override'] !== '' && $item['lembur_jam_override'] !== null) 
+                    ? max(0, (float)$item['lembur_jam_override']) 
+                    : null;
+                $absenOverride = (isset($item['absen_hari_override']) && $item['absen_hari_override'] !== '' && $item['absen_hari_override'] !== null) 
+                    ? max(0, (int)$item['absen_hari_override']) 
+                    : null;
+
+                $stmt->execute([
+                    (int)$userId,
+                    $bulan,
+                    $tahun,
+                    $pl,
+                    $lemburOverride,
+                    $absenOverride,
+                    $lain,
+                    $ket ?: null
+                ]);
+            }
+
+            $this->db->commit();
+            return true;
+        } catch (Exception $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            error_log("Error saveBatchPenyesuaian: " . $e->getMessage());
+            return false;
+        }
     }
 
     /**

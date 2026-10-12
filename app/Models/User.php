@@ -22,7 +22,7 @@ class User {
 
     public function findById(int $id): ?array {
         $stmt = $this->db->prepare("
-            SELECT u.*, l.nama_lokasi 
+            SELECT u.*, l.nama_lokasi, l.jam_masuk AS jam_masuk_lokasi, l.jam_pulang AS jam_pulang_lokasi, l.radius AS radius_lokasi 
             FROM `users` u 
             LEFT JOIN `lokasi_presensi` l ON u.lokasi_id = l.id 
             WHERE u.`id` = ? 
@@ -147,7 +147,19 @@ class User {
 
         $stmt2 = $this->db->prepare("SELECT 1 FROM `ketidakhadiran` WHERE `user_id` = ? LIMIT 1");
         $stmt2->execute([$userId]);
-        return (bool)$stmt2->fetch();
+        if ($stmt2->fetch()) {
+            return true;
+        }
+
+        $stmt3 = $this->db->prepare("SELECT 1 FROM `penugasan_lembur_pegawai` WHERE `user_id` = ? LIMIT 1");
+        $stmt3->execute([$userId]);
+        if ($stmt3->fetch()) {
+            return true;
+        }
+
+        $stmt4 = $this->db->prepare("SELECT 1 FROM `payroll_penyesuaian` WHERE `user_id` = ? LIMIT 1");
+        $stmt4->execute([$userId]);
+        return (bool)$stmt4->fetch();
     }
 
     public function updateStatus(int $id, string $status): bool {
