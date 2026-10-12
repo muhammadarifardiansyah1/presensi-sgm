@@ -67,7 +67,7 @@ class PenugasanLembur {
             $params[] = $status;
         }
 
-        $sql .= " GROUP BY pl.id ORDER BY pl.tanggal DESC, pl.jam_mulai DESC, pl.id DESC";
+        $sql .= " GROUP BY pl.id, l.nama_lokasi, l.jam_pulang, u_creator.nama ORDER BY pl.tanggal DESC, pl.jam_mulai DESC, pl.id DESC";
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);

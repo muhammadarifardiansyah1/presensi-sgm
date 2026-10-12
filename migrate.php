@@ -101,6 +101,18 @@ try {
         $pdo->exec("ALTER TABLE `users` ADD COLUMN `lokasi_id` INT DEFAULT NULL AFTER `jabatan`");
         echo "Column `lokasi_id` added to users.\n";
     }
+    if (!in_array('session_id', $userCols)) {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `session_id` VARCHAR(255) DEFAULT NULL");
+        echo "Column `session_id` added to users.\n";
+    }
+    if (!in_array('last_login_at', $userCols)) {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `last_login_at` DATETIME DEFAULT NULL");
+        echo "Column `last_login_at` added to users.\n";
+    }
+    if (!in_array('last_active_at', $userCols)) {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `last_active_at` DATETIME DEFAULT NULL");
+        echo "Column `last_active_at` added to users.\n";
+    }
 
     // 4. Create table `lokasi_presensi`
     $pdo->exec("

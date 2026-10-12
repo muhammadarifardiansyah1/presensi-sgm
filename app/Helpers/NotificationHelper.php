@@ -94,7 +94,7 @@ class NotificationHelper {
                 LEFT JOIN `lokasi_presensi` l ON pl.lokasi_id = l.id
                 LEFT JOIN `penugasan_lembur_pegawai` plp ON pl.id = plp.penugasan_lembur_id
                 WHERE pl.status = 'aktif' AND pl.tanggal >= CURDATE()
-                GROUP BY pl.id
+                GROUP BY pl.id, l.nama_lokasi
                 ORDER BY pl.tanggal ASC, pl.jam_mulai ASC
                 LIMIT 3
             ");
@@ -340,7 +340,7 @@ class NotificationHelper {
                 FROM `penugasan_lembur` pl
                 LEFT JOIN `lokasi_presensi` l ON pl.lokasi_id = l.id
                 LEFT JOIN `penugasan_lembur_pegawai` plp ON pl.id = plp.penugasan_lembur_id
-                GROUP BY pl.id
+                GROUP BY pl.id, l.nama_lokasi
                 ORDER BY pl.tanggal DESC, pl.jam_mulai DESC
                 LIMIT 20
             ");
@@ -614,7 +614,7 @@ class NotificationHelper {
                 LEFT JOIN `lokasi_presensi` l ON pl.lokasi_id = l.id
                 LEFT JOIN `penugasan_lembur_pegawai` plp ON pl.id = plp.penugasan_lembur_id
                 WHERE pl.status = 'aktif'
-                GROUP BY pl.id
+                GROUP BY pl.id, l.nama_lokasi
                 ORDER BY pl.tanggal DESC, pl.created_at DESC
                 LIMIT 4
             ");
