@@ -45,8 +45,16 @@ class ImageHelper {
         // 1. Buat partisi direktori berdasarkan Tahun/Bulan (YYYY/MM) untuk mencegah kelebihan inode/file pada satu folder
         $subDir = date('Y') . '/' . date('m');
         $fullTargetDir = rtrim($targetDir, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $subDir);
-        if (!is_dir($fullTargetDir)) {
-            mkdir($fullTargetDir, 0755, true);
+        
+        // Di Vercel serverless, filesystem utama read-only. Gunakan /tmp sebagai fallback.
+        $isVercel = (getenv('VERCEL') || !empty($_SERVER['VERCEL']) || getenv('VERCEL_ENV'));
+        if ($isVercel || (!is_dir($fullTargetDir) && !@mkdir($fullTargetDir, 0755, true))) {
+            if ($isVercel && is_dir('/tmp')) {
+                $fullTargetDir = '/tmp/presensi/' . str_replace('/', DIRECTORY_SEPARATOR, $subDir);
+                if (!is_dir($fullTargetDir)) {
+                    @mkdir($fullTargetDir, 0755, true);
+                }
+            }
         }
 
         $baseFilename = $prefix . '_' . time() . '_' . bin2hex(random_bytes(4)) . '.jpg';

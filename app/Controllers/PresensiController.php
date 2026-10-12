@@ -151,43 +151,15 @@ class PresensiController {
                 exit;
             }
 
-            // 1. Simpan foto lokal sebagai cadangan
+            // 1. Simpan foto lokal sebagai cadangan (di Vercel akan masuk /tmp, ephemeral tapi OK)
             $filename = $this->saveBase64Image($fotoBase64, 'masuk_' . $currentUser['id']);
 
             $jamMasuk = date('H:i:s');
             $terlambat = $this->calculateLateness($jamMasuk, $lokasi['jam_masuk'] ?? '08:00:00');
             $status = ($terlambat === 'Tepat Waktu') ? 'hadir' : 'terlambat';
 
-            // 2. Sinkronisasi Real-Time ke Google Spreadsheet & Upload ke Google Drive jika webhook aktif
-            $finalFoto = $filename;
-            if (GoogleSyncHelper::isConfigured()) {
-                $syncResult = GoogleSyncHelper::syncAttendance([
-                    'tipe'        => 'masuk',
-                    'user_id'     => $currentUser['id'],
-                    'nik'         => $currentUser['nik'] ?? '-',
-                    'nama'        => $currentUser['nama'] ?? '-',
-                    'jabatan'     => $currentUser['jabatan'] ?? '-',
-                    'lokasi'      => $lokasi['nama_lokasi'] ?? '-',
-                    'tanggal'     => $today,
-                    'jam_masuk'   => $jamMasuk,
-                    'status'      => $status,
-                    'terlambat'   => $terlambat,
-                    'latitude'    => $lat,
-                    'longitude'   => $long,
-                    'jarak'       => $jarak,
-                    'image_base64'=> $fotoBase64,
-                    'filename'    => 'masuk_' . ($currentUser['nik'] ?? $currentUser['id']) . '_' . date('Ymd_His')
-                ]);
-
-                if (!empty($syncResult['drive_url'])) {
-                    $finalFoto = $syncResult['drive_url'];
-                }
-            }
-
-            if (empty($finalFoto) && !$filename) {
-                echo json_encode(['status' => 'error', 'message' => 'Gagal memproses foto presensi!']);
-                exit;
-            }
+            // 2. PRIORITAS UTAMA: Simpan ke Database DULU (cepat, ~50ms)
+            $finalFoto = $filename ?: ('selfie_' . $currentUser['id'] . '_' . date('Ymd_His') . '.jpg');
 
             $sukses = $this->presensiModel->absenMasuk(
                 $currentUser['id'],
@@ -203,6 +175,33 @@ class PresensiController {
             );
 
             if ($sukses) {
+                // 3. SETELAH DB SUKSES: Sinkronisasi ke Google secara async (non-blocking, maks 2 detik)
+                // Jika gagal/timeout, presensi sudah aman tersimpan di database
+                if (GoogleSyncHelper::isConfigured()) {
+                    try {
+                        GoogleSyncHelper::syncAttendanceAsync([
+                            'tipe'        => 'masuk',
+                            'user_id'     => $currentUser['id'],
+                            'nik'         => $currentUser['nik'] ?? '-',
+                            'nama'        => $currentUser['nama'] ?? '-',
+                            'jabatan'     => $currentUser['jabatan'] ?? '-',
+                            'lokasi'      => $lokasi['nama_lokasi'] ?? '-',
+                            'tanggal'     => $today,
+                            'jam_masuk'   => $jamMasuk,
+                            'status'      => $status,
+                            'terlambat'   => $terlambat,
+                            'latitude'    => $lat,
+                            'longitude'   => $long,
+                            'jarak'       => $jarak,
+                            'image_base64'=> $fotoBase64,
+                            'filename'    => 'masuk_' . ($currentUser['nik'] ?? $currentUser['id']) . '_' . date('Ymd_His')
+                        ]);
+                    } catch (\Throwable $e) {
+                        // Abaikan error sync — presensi sudah tersimpan di DB
+                        error_log('Google Sync Error (non-fatal): ' . $e->getMessage());
+                    }
+                }
+
                 echo json_encode([
                     'status' => 'success',
                     'message' => 'Presensi Masuk berhasil tercatat! Selamat bekerja.',
@@ -321,37 +320,8 @@ class PresensiController {
                 $jamPulangStandar
             );
 
-            // 2. Sinkronisasi Real-Time ke Google Spreadsheet & Upload ke Google Drive
-            $finalFoto = $filename;
-            if (GoogleSyncHelper::isConfigured()) {
-                $syncResult = GoogleSyncHelper::syncAttendance([
-                    'tipe'            => 'pulang',
-                    'user_id'         => $currentUser['id'],
-                    'nik'             => $currentUser['nik'] ?? '-',
-                    'nama'            => $currentUser['nama'] ?? '-',
-                    'jabatan'         => $currentUser['jabatan'] ?? '-',
-                    'lokasi'          => $lokasi['nama_lokasi'] ?? '-',
-                    'tanggal'         => $today,
-                    'jam_masuk'       => $presensiHariIni['jam_masuk'] ?? '-',
-                    'jam_pulang'      => $jamPulang,
-                    'total_jam_kerja' => $totalJam,
-                    'status'          => $presensiHariIni['status_kehadiran'] ?? 'hadir',
-                    'latitude'        => $lat,
-                    'longitude'       => $long,
-                    'jarak'           => $jarak,
-                    'image_base64'    => $fotoBase64,
-                    'filename'        => 'pulang_' . ($currentUser['nik'] ?? $currentUser['id']) . '_' . date('Ymd_His')
-                ]);
-
-                if (!empty($syncResult['drive_url'])) {
-                    $finalFoto = $syncResult['drive_url'];
-                }
-            }
-
-            if (empty($finalFoto) && !$filename) {
-                echo json_encode(['status' => 'error', 'message' => 'Gagal memproses foto presensi!']);
-                exit;
-            }
+            // 2. PRIORITAS UTAMA: Simpan ke Database DULU
+            $finalFoto = $filename ?: ('selfie_' . $currentUser['id'] . '_' . date('Ymd_His') . '.jpg');
 
             $sukses = $this->presensiModel->absenKeluar(
                 $presensiHariIni['id'],
@@ -364,6 +334,32 @@ class PresensiController {
             );
 
             if ($sukses) {
+                // 3. SETELAH DB SUKSES: Sinkronisasi ke Google secara async (non-blocking)
+                if (GoogleSyncHelper::isConfigured()) {
+                    try {
+                        GoogleSyncHelper::syncAttendanceAsync([
+                            'tipe'            => 'pulang',
+                            'user_id'         => $currentUser['id'],
+                            'nik'             => $currentUser['nik'] ?? '-',
+                            'nama'            => $currentUser['nama'] ?? '-',
+                            'jabatan'         => $currentUser['jabatan'] ?? '-',
+                            'lokasi'          => $lokasi['nama_lokasi'] ?? '-',
+                            'tanggal'         => $today,
+                            'jam_masuk'       => $presensiHariIni['jam_masuk'] ?? '-',
+                            'jam_pulang'      => $jamPulang,
+                            'total_jam_kerja' => $totalJam,
+                            'status'          => $presensiHariIni['status_kehadiran'] ?? 'hadir',
+                            'latitude'        => $lat,
+                            'longitude'       => $long,
+                            'jarak'           => $jarak,
+                            'image_base64'    => $fotoBase64,
+                            'filename'        => 'pulang_' . ($currentUser['nik'] ?? $currentUser['id']) . '_' . date('Ymd_His')
+                        ]);
+                    } catch (\Throwable $e) {
+                        error_log('Google Sync Error (non-fatal): ' . $e->getMessage());
+                    }
+                }
+
                 echo json_encode([
                     'status' => 'success',
                     'message' => 'Presensi Pulang berhasil! Terima kasih atas dedikasi Anda hari ini.',

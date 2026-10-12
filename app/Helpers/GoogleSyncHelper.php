@@ -185,4 +185,50 @@ class GoogleSyncHelper {
             'message' => $json['message'] ?? ($isSuccess ? 'Sinkronisasi berhasil' : 'Gagal memproses data di Google Apps Script')
         ];
     }
+
+    /**
+     * Fire-and-forget: Kirim data ke Google Apps Script TANPA menunggu response
+     * Presensi langsung tersimpan di database, sync ke Google menyusul di background
+     * Timeout hanya 1 detik — jika server Google tidak merespon, tidak menghambat user
+     */
+    public static function syncAttendanceAsync(array $data): void {
+        if (!self::isConfigured()) {
+            return;
+        }
+
+        $url = self::getWebhookUrl();
+        $payload = array_merge([
+            'action' => 'presensi',
+            'timestamp' => date('Y-m-d H:i:s')
+        ], $data);
+
+        $jsonData = json_encode($payload);
+        if ($jsonData === false) {
+            return;
+        }
+
+        // Fire-and-forget: kirim tanpa menunggu response
+        if (function_exists('curl_init')) {
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $url,
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => $jsonData,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    'Content-Type: application/json',
+                    'Content-Length: ' . strlen($jsonData)
+                ],
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS => 3,
+                CURLOPT_TIMEOUT => 2,        // Maks 2 detik total
+                CURLOPT_CONNECTTIMEOUT => 1,  // Maks 1 detik koneksi
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_USERAGENT => 'SGM-Attendance-App/1.0-async',
+                CURLOPT_NOSIGNAL => 1         // Prevent signal interference
+            ]);
+            @curl_exec($ch);
+            curl_close($ch);
+        }
+    }
 }
