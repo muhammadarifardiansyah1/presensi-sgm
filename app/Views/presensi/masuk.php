@@ -19,19 +19,51 @@ require_once __DIR__ . '/../layouts/header.php';
         </div>
 
         <div style="margin-bottom: 12px;">
-            <label class="form-label" for="select-lokasi" style="font-size:0.8rem;">Titik Lokasi Kantor:</label>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; flex-wrap:wrap; gap:4px;">
+                <label class="form-label" for="select-lokasi" style="font-size:0.8rem; margin:0;">Titik Lokasi Kantor:</label>
+                <?php if (count($allowedLokasiIds) <= 1): ?>
+                    <span style="font-size:0.72rem; color:#059669; font-weight:700; background:rgba(16,185,129,0.1); padding:2px 8px; border-radius:4px; border:1px solid rgba(16,185,129,0.25);">
+                        🔒 Terkunci (Sesuai Penugasan Admin)
+                    </span>
+                <?php else: ?>
+                    <span style="font-size:0.72rem; color:#d97706; font-weight:700; background:rgba(245,158,11,0.1); padding:2px 8px; border-radius:4px; border:1px solid rgba(245,158,11,0.25);">
+                        ⭐ Izin SPL Lembur Aktif
+                    </span>
+                <?php endif; ?>
+            </div>
             <select id="select-lokasi" class="form-select" style="padding:6px 10px; font-size:0.85rem;">
-                <?php foreach ($lokasiList as $lok): ?>
+                <?php foreach ($lokasiList as $lok): 
+                    $isAssigned = ($lok['id'] == $assignedLokasiId);
+                    $isLembur = ($penugasanLembur && $lok['id'] == ($penugasanLembur['lokasi_id'] ?? 0));
+                    $isAllowed = in_array((int)$lok['id'], $allowedLokasiIds);
+                ?>
                     <option value="<?= $lok['id'] ?>" 
                             data-lat="<?= $lok['latitude'] ?>" 
                             data-lng="<?= $lok['longitude'] ?>" 
                             data-radius="<?= $lok['radius'] ?>"
                             data-jam="<?= $lok['jam_masuk'] ?>"
+                            <?= !$isAllowed ? 'disabled style="color:var(--text-muted); background:rgba(0,0,0,0.05);"' : '' ?>
                             <?= ($lok['id'] == ($defaultLokasi['id'] ?? 0)) ? 'selected' : '' ?>>
                         <?= htmlspecialchars($lok['nama_lokasi']) ?> (Radius <?= $lok['radius'] ?>m)
+                        <?php if ($isAssigned): ?>
+                            — [Lokasi Resmi Anda]
+                        <?php elseif ($isLembur): ?>
+                            — [Izin Lembur - SPL Aktif]
+                        <?php else: ?>
+                            — [Terkunci: Perlu Izin Admin/SPL]
+                        <?php endif; ?>
                     </option>
                 <?php endforeach; ?>
             </select>
+            <?php if (count($allowedLokasiIds) <= 1): ?>
+                <small style="color:var(--text-muted); display:block; margin-top:4px; font-size:0.74rem;">
+                    Lokasi presensi otomatis sesuai dengan penugasan Admin. Pilihan lokasi lain terkunci kecuali ada izin Surat Perintah Lembur (SPL).
+                </small>
+            <?php else: ?>
+                <small style="color:#059669; display:block; margin-top:4px; font-size:0.74rem; font-weight:600;">
+                    ✓ Anda memiliki izin SPL lembur di <strong><?= htmlspecialchars($lokasiLembur['nama_lokasi'] ?? 'Lokasi SPL') ?></strong>.
+                </small>
+            <?php endif; ?>
         </div>
 
         <div id="map-container"></div>

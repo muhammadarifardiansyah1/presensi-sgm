@@ -1,31 +1,17 @@
 /**
  * ==============================================================================
  * GOOGLE APPS SCRIPT: BACKEND SINKRONISASI SPREADSHEET & GOOGLE DRIVE (100% GRATIS)
- * SISTEM PRESENSI CV. SURYA GEMILANG MOJOPAHIT (SGM)
+ * SISTEM PRESENSI CV. SURYA GEMILANG MAJAPAHIT (SGM)
  * ==============================================================================
  * 
- * PANDUAN CARA PASANG:
- * 1. Buka Google Drive Anda (drive.google.com).
- * 2. Buat Folder Baru, beri nama misalnya: "Foto Presensi SGM".
- * 3. Buka folder tersebut, salin FOLDER ID dari URL browser:
- *    Contoh URL: https://drive.google.com/drive/folders/1aBcDeFgHiJkLmNoPqRsTuVwXyZ
- *    -> FOLDER ID-nya adalah: 1aBcDeFgHiJkLmNoPqRsTuVwXyZ
- * 4. Buat Google Spreadsheet baru di Google Drive Anda.
- * 5. Di Spreadsheet, klik menu: Ekstensi (Extensions) -> Apps Script.
- * 6. Hapus semua kode default, lalu COPAS (TEMPEL) seluruh isi file ini.
- * 7. Ganti "MASUKKAN_FOLDER_ID_DRIVE_DISINI" pada baris 26 dengan ID Folder Anda.
- * 8. Klik tombol "Simpan" (ikon disket).
- * 9. Klik tombol "Deploy" (di kanan atas) -> "New deployment" (Deployment baru).
- * 10. Pilih type: "Web app".
- * 11. Konfigurasi:
- *     - Description: "SGM Webhook v1"
- *     - Execute as: "Me (email Anda)"
- *     - Who has access: "Anyone" (Siapa saja - PENTING agar web bisa kirim data)
- * 12. Klik "Deploy", lalu berikan izin akses Google ("Authorize access").
- * 13. Salin "Web app URL" (format: https://script.google.com/macros/s/.../exec).
- * 14. Tempel Web app URL tersebut ke:
- *     - Pengaturan di Web SGM (/gaji -> Pengaturan Webhook), atau
- *     - Environment Variable Vercel: GOOGLE_WEBHOOK_URL
+ * FITUR:
+ * 1. Otomatis pisah sheet per bulan ("Presensi [Bulan] [Tahun]").
+ * 2. Header elegan: "REKAP PRESENSI CV. SURYA GEMILANG MAJAPAHIT".
+ * 3. Informasi Real-time: "Total Pegawai: X Orang | Waktu Sinkronisasi: [Waktu] WIB".
+ * 4. Kolom lengkap: No, Tanggal, NIK, Nama Pegawai, Jabatan, Lokasi, Jam Masuk,
+ *    Jam Pulang, Total Jam Kerja, Status, Keterangan Terlambat, Link Foto Masuk,
+ *    Link Foto Pulang, Koordinat GPS.
+ * 5. Foto selfie tersimpan di Google Drive dan URL langsung tercatat di Spreadsheet.
  * ==============================================================================
  */
 
@@ -56,7 +42,6 @@ function doPost(e) {
         );
       }
 
-      // Catat ke Sheet "Ketidakhadiran"
       let sheetIzin = getOrCreateSheet(ss, "Ketidakhadiran", [
         "Waktu Submit", "NIK", "Nama Pegawai", "Kategori", "Tgl Mulai", "Tgl Selesai", "Keterangan", "Link Dokumen Drive"
       ]);
@@ -79,7 +64,54 @@ function doPost(e) {
       });
     }
 
-    // 2. HANDLER: PRESENSI MASUK & PULANG
+    // 2. HANDLER: BATCH SYNC REKAP PRESENSI BULANAN DARI ADMIN
+    if (action === "sync_presensi" || (data.sheet_name && data.rows && Array.isArray(data.rows))) {
+      const namaBulanList = [
+        "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+        "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+      ];
+      const bulanIndex = data.bulan ? (parseInt(data.bulan) - 1) : new Date().getMonth();
+      const tahunText = data.tahun || new Date().getFullYear();
+      const namaSheetBulan = "Presensi " + namaBulanList[bulanIndex] + " " + tahunText;
+      const sheetName = data.sheet_name || namaSheetBulan;
+
+      const listRows = data.rows || data.data || [];
+      const uniqueNiks = {};
+      listRows.forEach(function(r) { if (r.nik && r.nik !== "-") uniqueNiks[r.nik] = true; });
+      const totalPegawaiCount = data.total_pegawai || Object.keys(uniqueNiks).length || listRows.length;
+
+      let sheetBatch = ss.getSheetByName(sheetName);
+      if (sheetBatch) {
+        sheetBatch.clear();
+      }
+      sheetBatch = setupMonthlyPresensiSheet(ss, sheetName, totalPegawaiCount);
+
+      listRows.forEach(function(r, idx) {
+        sheetBatch.appendRow([
+          (idx + 1),
+          r.tanggal || "-",
+          r.nik || "-",
+          r.nama || "-",
+          r.jabatan || "-",
+          r.lokasi || "-",
+          r.jam_masuk || "-",
+          r.jam_pulang || "-",
+          r.total_jam_kerja || "-",
+          (r.status || r.status_masuk || "hadir").toUpperCase(),
+          r.terlambat || "Tepat Waktu",
+          r.foto_masuk || r.link_foto_masuk || "-",
+          r.foto_keluar || r.link_foto_keluar || "-",
+          r.koordinat || (r.latitude ? (r.latitude + ", " + r.longitude) : "-")
+        ]);
+      });
+
+      return jsonResponse({
+        status: "success",
+        message: "Rekap presensi berhasil disinkronkan ke sheet '" + sheetName + "' (" + listRows.length + " data)"
+      });
+    }
+
+    // 3. HANDLER: PRESENSI REAL-TIME (MASUK & PULANG)
     if (action === "presensi") {
       let photoUrl = "";
       if (data.image_base64 && GOOGLE_DRIVE_FOLDER_ID && GOOGLE_DRIVE_FOLDER_ID !== "MASUKKAN_FOLDER_ID_DRIVE_DISINI") {
@@ -90,39 +122,49 @@ function doPost(e) {
         );
       }
 
-      const sheetPresensi = getOrCreateSheet(ss, "Presensi", [
-        "Tanggal", "NIK", "Nama Pegawai", "Jabatan", "Lokasi", 
-        "Jam Masuk", "Jam Pulang", "Total Jam Kerja", "Status", "Keterangan Terlambat", 
-        "Link Foto Masuk", "Link Foto Pulang", "Koordinat GPS"
-      ]);
+      // Tentukan Nama Sheet Berdasarkan Bulan Presensi
+      const namaBulanList = [
+        "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+        "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+      ];
+      const tglString = data.tanggal || formatJakartaDate(new Date());
+      const dateParts = tglString.split("-");
+      const tahunPart = dateParts[0] || new Date().getFullYear();
+      const bulanPart = dateParts[1] ? (parseInt(dateParts[1], 10) - 1) : new Date().getMonth();
+      const sheetName = "Presensi " + namaBulanList[bulanPart] + " " + tahunPart;
 
-      const tgl = data.tanggal || formatJakartaDate(new Date());
-      const nik = data.nik || "-";
+      const sheetPresensi = setupMonthlyPresensiSheet(ss, sheetName, data.total_pegawai);
 
-      // Cek apakah sudah ada baris untuk pegawai ini di tanggal ini (untuk update jam pulang)
+      const tgl = tglString;
+      const nik = String(data.nik || "-");
+
+      // Cek apakah sudah ada baris untuk NIK dan Tanggal ini (Data mulai dari baris ke-4)
       let existingRowIndex = -1;
       const values = sheetPresensi.getDataRange().getValues();
-      for (let i = 1; i < values.length; i++) {
-        const rowTgl = values[i][0] instanceof Date ? formatJakartaDate(values[i][0]) : String(values[i][0]);
-        const rowNik = String(values[i][1]);
+      for (let i = 3; i < values.length; i++) {
+        const rowTgl = values[i][1] instanceof Date ? formatJakartaDate(values[i][1]) : String(values[i][1]);
+        const rowNik = String(values[i][2]);
         if (rowTgl === tgl && rowNik === nik) {
-          existingRowIndex = i + 1; // 1-indexed baris spreadsheet
+          existingRowIndex = i + 1; // 1-indexed row number
           break;
         }
       }
 
       if (data.tipe === "pulang" && existingRowIndex > 0) {
-        // Update data pulang di baris yang sudah ada
-        if (data.jam_pulang) sheetPresensi.getRange(existingRowIndex, 7).setValue(data.jam_pulang);
-        if (data.total_jam_kerja) sheetPresensi.getRange(existingRowIndex, 8).setValue(data.total_jam_kerja);
-        if (photoUrl) sheetPresensi.getRange(existingRowIndex, 12).setValue(photoUrl);
+        // Update jam pulang, total jam kerja, dan foto pulang
+        if (data.jam_pulang) sheetPresensi.getRange(existingRowIndex, 8).setValue(data.jam_pulang);
+        if (data.total_jam_kerja) sheetPresensi.getRange(existingRowIndex, 9).setValue(data.total_jam_kerja);
+        if (data.status) sheetPresensi.getRange(existingRowIndex, 10).setValue((data.status).toUpperCase());
+        if (photoUrl) sheetPresensi.getRange(existingRowIndex, 13).setValue(photoUrl);
       } else if (existingRowIndex > 0) {
-        // Update baris yang sudah ada
-        if (data.jam_masuk) sheetPresensi.getRange(existingRowIndex, 6).setValue(data.jam_masuk);
-        if (photoUrl) sheetPresensi.getRange(existingRowIndex, 11).setValue(photoUrl);
+        // Update jam masuk & foto masuk jika sudah ada baris
+        if (data.jam_masuk) sheetPresensi.getRange(existingRowIndex, 7).setValue(data.jam_masuk);
+        if (photoUrl) sheetPresensi.getRange(existingRowIndex, 12).setValue(photoUrl);
       } else {
-        // Buat baris baru
+        // Buat baris data baru
+        const nomorUrut = Math.max(1, values.length - 2);
         sheetPresensi.appendRow([
+          nomorUrut,
           tgl,
           nik,
           data.nama || "-",
@@ -141,36 +183,8 @@ function doPost(e) {
 
       return jsonResponse({
         status: "success",
-        message: "Data presensi tercatat di Spreadsheet dan foto tersimpan di Google Drive!",
+        message: "Data presensi tercatat di sheet '" + sheetName + "' dan foto tersimpan di Google Drive!",
         drive_url: photoUrl
-      });
-    }
-
-    // 3. HANDLER: REKAP BULANAN BATCH (Dukungan Fitur Sinkronisasi Laporan)
-    if (data.sheet_name && data.rows && Array.isArray(data.rows)) {
-      const sheetBatch = getOrCreateSheet(ss, data.sheet_name, [
-        "No", "NIK", "Nama Pegawai", "Jabatan", "Lokasi", "Tanggal", "Jam Masuk", "Status Masuk", "Keterangan", "Jam Pulang", "Total Jam Kerja"
-      ]);
-
-      data.rows.forEach(function(r) {
-        sheetBatch.appendRow([
-          r.no || "-",
-          r.nik || "-",
-          r.nama || "-",
-          r.jabatan || "-",
-          r.lokasi || "-",
-          r.tanggal || "-",
-          r.jam_masuk || "-",
-          r.status_masuk || "-",
-          r.terlambat || "-",
-          r.jam_pulang || "-",
-          r.total_jam_kerja || "-"
-        ]);
-      });
-
-      return jsonResponse({
-        status: "success",
-        message: "Rekap bulanan berhasil disinkronkan ke sheet " + data.sheet_name
       });
     }
 
@@ -179,6 +193,76 @@ function doPost(e) {
   } catch (err) {
     return jsonResponse({ status: "error", message: err.toString() });
   }
+}
+
+/**
+ * Setup atau Ambil Sheet Presensi Bulanan dengan Header Khusus CV. Surya Gemilang Majapahit
+ */
+function setupMonthlyPresensiSheet(ss, sheetName, totalPegawai) {
+  let sheet = ss.getSheetByName(sheetName);
+  const headers = [
+    "No", "Tanggal", "NIK", "Nama Pegawai", "Jabatan", "Lokasi", 
+    "Jam Masuk", "Jam Pulang", "Total Jam Kerja", "Status", 
+    "Keterangan Terlambat", "Link Foto Masuk", "Link Foto Pulang", "Koordinat GPS"
+  ];
+  const totalCols = headers.length;
+  const nowFormatted = formatJakartaTime(new Date());
+
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+    
+    // Baris 1: Header Judul Utama Perusahaan
+    sheet.getRange(1, 1, 1, totalCols).merge();
+    sheet.getRange(1, 1)
+         .setValue("REKAP PRESENSI CV. SURYA GEMILANG MAJAPAHIT")
+         .setBackground("#047857")
+         .setFontColor("#FFFFFF")
+         .setFontWeight("bold")
+         .setFontSize(13)
+         .setHorizontalAlignment("center")
+         .setVerticalAlignment("middle");
+    sheet.setRowHeight(1, 36);
+
+    // Baris 2: Sub-header Total Pegawai dan Waktu Sinkronisasi
+    const totalPegText = totalPegawai ? String(totalPegawai) : "-";
+    sheet.getRange(2, 1, 1, totalCols).merge();
+    sheet.getRange(2, 1)
+         .setValue("Total Pegawai: " + totalPegText + " Orang   |   Waktu Sinkronisasi: " + nowFormatted + " WIB")
+         .setBackground("#d1fae5")
+         .setFontColor("#065f46")
+         .setFontWeight("bold")
+         .setFontSize(9)
+         .setHorizontalAlignment("center")
+         .setVerticalAlignment("middle");
+    sheet.setRowHeight(2, 22);
+
+    // Baris 3: Header Kolom Tabel
+    sheet.appendRow(headers);
+    const headerRange = sheet.getRange(3, 1, 1, totalCols);
+    headerRange.setFontWeight("bold")
+               .setBackground("#059669")
+               .setFontColor("#FFFFFF")
+               .setFontSize(10)
+               .setHorizontalAlignment("center")
+               .setVerticalAlignment("middle");
+    sheet.setRowHeight(3, 28);
+    sheet.setFrozenRows(3);
+  } else {
+    // Perbarui waktu sinkronisasi di Baris 2
+    try {
+      const currentVal = String(sheet.getRange(2, 1).getValue() || "");
+      let pegText = totalPegawai ? String(totalPegawai) : null;
+      if (!pegText) {
+        const match = currentVal.match(/Total Pegawai:\s*([0-9]+)/);
+        pegText = match ? match[1] : "-";
+      }
+      sheet.getRange(2, 1).setValue("Total Pegawai: " + pegText + " Orang   |   Waktu Sinkronisasi: " + nowFormatted + " WIB");
+    } catch (e) {
+      // Ignore format update error
+    }
+  }
+
+  return sheet;
 }
 
 /**
@@ -213,7 +297,7 @@ function uploadBase64ToDrive(base64Data, filename, mimeType) {
 }
 
 /**
- * Helper Membuat atau Memilih Sheet dengan Header Elegan
+ * Helper Membuat Sheet Standar (Ketidakhadiran, dll)
  */
 function getOrCreateSheet(ss, name, headers) {
   let sheet = ss.getSheetByName(name);

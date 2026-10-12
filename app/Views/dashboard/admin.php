@@ -266,9 +266,11 @@ $rateKepatuhan = ($jumlahHadir > 0) ? round(($tepatWaktu / $jumlahHadir) * 100) 
                                 $inisialPegawai = mb_strtoupper(mb_substr($act['judul'] ?? 'P', 0, 1));
                             ?>
                                 <div class="activity-feed-left">
-                                    <div style="width: 42px; height: 42px; border-radius: 50%; overflow: hidden; background: var(--bg-surface); border: 2px solid var(--border-color); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 700; color: var(--accent-blue);">
+                                    <div style="width: 44px; height: 44px; border-radius: 50%; overflow: hidden; background: var(--bg-surface); border: 2px solid var(--border-color); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 700; color: var(--accent-blue);">
                                         <?php if (!empty($fotoUrl)): ?>
-                                            <img src="<?= $fotoUrl ?>" alt="" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.remove(); this.parentElement.innerText='<?= $inisialPegawai ?>';">
+                                            <a href="<?= $fotoUrl ?>" target="_blank" onclick="event.stopPropagation();" title="Buka Foto Presensi Google Drive" style="display:flex; width:100%; height:100%; align-items:center; justify-content:center;">
+                                                <img src="<?= $fotoUrl ?>" alt="" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.remove(); this.parentElement.innerText='<?= $inisialPegawai ?>';">
+                                            </a>
                                         <?php else: ?>
                                             <?= $inisialPegawai ?>
                                         <?php endif; ?>
@@ -290,11 +292,18 @@ $rateKepatuhan = ($jumlahHadir > 0) ? round(($tepatWaktu / $jumlahHadir) * 100) 
                                         </p>
                                     </div>
                                 </div>
-                                <div class="activity-feed-right">
-                                    <span class="badge badge-<?= htmlspecialchars($act['badge_type'] ?? 'success') ?>">
-                                        <?= htmlspecialchars($act['badge_text'] ?? 'Tepat Waktu') ?>
-                                    </span>
-                                    <span class="activity-date-badge"><?= htmlspecialchars($act['waktu_display']) ?></span>
+                                <div class="activity-feed-right" style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+                                    <div style="display:flex; align-items:center; gap:6px;">
+                                        <span class="badge badge-<?= htmlspecialchars($act['badge_type'] ?? 'success') ?>">
+                                            <?= htmlspecialchars($act['badge_text'] ?? 'Tepat Waktu') ?>
+                                        </span>
+                                        <span class="activity-date-badge"><?= htmlspecialchars($act['waktu_display']) ?></span>
+                                    </div>
+                                    <?php if (!empty($fotoUrl)): ?>
+                                        <a href="<?= $fotoUrl ?>" target="_blank" onclick="event.stopPropagation();" style="display:inline-flex; align-items:center; gap:4px; font-size:0.72rem; color:#059669; font-weight:700; text-decoration:none; background:rgba(16,185,129,0.1); padding:2px 8px; border-radius:4px; border:1px solid rgba(16,185,129,0.25);" title="Buka Foto Presensi di Google Drive">
+                                            <?= Icon::get('external-link', 11) ?> Foto Drive
+                                        </a>
+                                    <?php endif; ?>
                                 </div>
                             <?php endif; ?>
 

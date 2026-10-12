@@ -83,9 +83,12 @@ class PresensiController {
         }
 
         $lokasiList = $this->lokasiModel->getAll();
+        
+        // 1. Lokasi penugasan resmi yang ditentukan admin untuk pegawai ini
+        $assignedLokasiId = !empty($currentUser['lokasi_id']) ? (int)$currentUser['lokasi_id'] : 0;
         $defaultLokasi = null;
-        if (!empty($currentUser['lokasi_id'])) {
-            $defaultLokasi = $this->lokasiModel->findById((int)$currentUser['lokasi_id']);
+        if ($assignedLokasiId > 0) {
+            $defaultLokasi = $this->lokasiModel->findById($assignedLokasiId);
         }
         if (!$defaultLokasi) {
             $defaultLokasi = $this->lokasiModel->getDefault() ?: [
@@ -96,7 +99,22 @@ class PresensiController {
                 'radius' => 500,
                 'jam_masuk' => '08:00:00'
             ];
+            $assignedLokasiId = (int)$defaultLokasi['id'];
         }
+
+        // 2. Cek apakah ada izin penugasan lembur (SPL) aktif hari ini dari admin
+        require_once __DIR__ . '/../Models/PenugasanLembur.php';
+        $lemburModel = new PenugasanLembur();
+        $penugasanLembur = $lemburModel->getPenugasanAktifUser((int)$currentUser['id'], $today);
+
+        $allowedLokasiIds = [$assignedLokasiId];
+        $lokasiLembur = null;
+        if ($penugasanLembur && !empty($penugasanLembur['lokasi_id'])) {
+            $lokasiLemburId = (int)$penugasanLembur['lokasi_id'];
+            $allowedLokasiIds[] = $lokasiLemburId;
+            $lokasiLembur = $this->lokasiModel->findById($lokasiLemburId);
+        }
+        $allowedLokasiIds = array_unique($allowedLokasiIds);
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Content-Type: application/json');
@@ -119,10 +137,20 @@ class PresensiController {
             $fotoBase64 = $_POST['image'] ?? '';
             $lat        = (float) ($_POST['latitude'] ?? 0);
             $long       = (float) ($_POST['longitude'] ?? 0);
-            $lokasiId   = (int) ($_POST['lokasi_id'] ?? $defaultLokasi['id']);
+            $lokasiId   = (int) ($_POST['lokasi_id'] ?? $assignedLokasiId);
 
             if (empty($fotoBase64) || $lat == 0 || $long == 0) {
                 echo json_encode(['status' => 'error', 'message' => 'Foto dan koordinat GPS wajib diisi!']);
+                exit;
+            }
+
+            // Validasi Kunci Lokasi: Pegawai hanya boleh presensi di lokasi tugas resmi atau lokasi lembur (SPL)
+            if (!in_array($lokasiId, $allowedLokasiIds)) {
+                $namaLokasiResmi = $defaultLokasi['nama_lokasi'] ?? 'Kantor Penugasan Resmi';
+                echo json_encode([
+                    'status' => 'error',
+                    'message' => "Anda tidak diizinkan presensi di lokasi ini! Lokasi presensi Anda telah ditentukan oleh Admin ({$namaLokasiResmi}). Presensi di lokasi lain hanya dapat dilakukan jika Anda memiliki Surat Perintah Lembur (SPL) yang disetujui Admin."
+                ]);
                 exit;
             }
 
@@ -197,6 +225,7 @@ class PresensiController {
                             'latitude'    => $lat,
                             'longitude'   => $long,
                             'jarak'       => $jarak,
+                            'total_pegawai'=> $this->userModel->countPegawaiAktif(),
                             'image_base64'=> $fotoBase64,
                             'filename'    => $driveFilename
                         ], 6);
@@ -370,6 +399,7 @@ class PresensiController {
                             'latitude'        => $lat,
                             'longitude'       => $long,
                             'jarak'           => $jarak,
+                            'total_pegawai'   => $this->userModel->countPegawaiAktif(),
                             'image_base64'    => $fotoBase64,
                             'filename'        => $driveFilename
                         ], 6);

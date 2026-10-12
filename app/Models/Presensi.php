@@ -577,7 +577,9 @@ class Presensi {
             9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'
         ];
         $bulanText = $namaBulan[$bulan] ?? (string)$bulan;
-        $sheetName = "Rekap Absensi {$bulanText} {$tahun}";
+        require_once __DIR__ . '/User.php';
+        $totalPegawai = (new User())->countPegawaiAktif();
+        $sheetName = "Presensi {$bulanText} {$tahun}";
         $periodeText = "{$bulanText} {$tahun}";
 
         $rows = [];
@@ -590,16 +592,22 @@ class Presensi {
 
             $rows[] = [
                 'no' => $no++,
+                'tanggal' => $r['tanggal'] ?? '-',
                 'nik' => $r['nik'] ?? '-',
                 'nama' => $r['nama_pegawai'] ?? '-',
                 'jabatan' => $r['jabatan'] ?? '-',
                 'lokasi' => $r['nama_lokasi'] ?? '-',
-                'tanggal' => $r['tanggal'] ?? '-',
                 'jam_masuk' => $r['jam_masuk'] ?? '-',
-                'status_masuk' => $statusMasuk,
-                'terlambat' => $r['total_terlambat'] ?? 'Tepat Waktu',
                 'jam_pulang' => $r['jam_pulang'] ?? '-',
                 'total_jam_kerja' => $r['total_jam_kerja'] ?? '-',
+                'status' => ucfirst($r['status_kehadiran'] ?? 'Hadir'),
+                'status_masuk' => $statusMasuk,
+                'terlambat' => $r['total_terlambat'] ?? 'Tepat Waktu',
+                'foto_masuk' => ImageHelper::getPhotoUrl($r['foto_masuk'] ?? '', 'presensi'),
+                'foto_keluar' => ImageHelper::getPhotoUrl($r['foto_keluar'] ?? '', 'presensi'),
+                'latitude' => $r['lat_masuk'] ?? '',
+                'longitude' => $r['long_masuk'] ?? '',
+                'koordinat' => (!empty($r['lat_masuk']) && !empty($r['long_masuk'])) ? ($r['lat_masuk'] . ', ' . $r['long_masuk']) : '-',
                 'jam_lembur' => (float)($r['jam_lembur'] ?? 0),
                 'keterangan' => !empty($r['keterangan_admin']) ? $r['keterangan_admin'] : ucfirst($r['status_kehadiran'] ?? 'Hadir')
             ];
@@ -611,6 +619,7 @@ class Presensi {
             'periode' => $periodeText,
             'bulan' => $bulan,
             'tahun' => $tahun,
+            'total_pegawai' => $totalPegawai,
             'timestamp' => date('Y-m-d H:i:s'),
             'total_records' => count($rows),
             'data' => $rows,
