@@ -175,11 +175,15 @@ class PresensiController {
             );
 
             if ($sukses) {
-                // 3. SETELAH DB SUKSES: Sinkronisasi ke Google secara async (non-blocking, maks 2 detik)
-                // Jika gagal/timeout, presensi sudah aman tersimpan di database
+                // 3. SETELAH DB SUKSES: Sinkronisasi ke Google & Simpan Link Foto Google Drive ke Database
                 if (GoogleSyncHelper::isConfigured()) {
                     try {
-                        GoogleSyncHelper::syncAttendanceAsync([
+                        $namaBersih = preg_replace('/[^a-zA-Z0-9]/', '_', $currentUser['nama'] ?? 'Pegawai');
+                        $namaBersih = trim(preg_replace('/_+/', '_', $namaBersih), '_');
+                        $nikBersih  = preg_replace('/[^a-zA-Z0-9]/', '_', $currentUser['nik'] ?? $currentUser['id']);
+                        $driveFilename = 'masuk_' . $nikBersih . ($namaBersih ? '_' . $namaBersih : '') . '_' . date('Ymd_His');
+
+                        $syncResult = GoogleSyncHelper::syncAttendance([
                             'tipe'        => 'masuk',
                             'user_id'     => $currentUser['id'],
                             'nik'         => $currentUser['nik'] ?? '-',
@@ -194,8 +198,17 @@ class PresensiController {
                             'longitude'   => $long,
                             'jarak'       => $jarak,
                             'image_base64'=> $fotoBase64,
-                            'filename'    => 'masuk_' . ($currentUser['nik'] ?? $currentUser['id']) . '_' . date('Ymd_His')
-                        ]);
+                            'filename'    => $driveFilename
+                        ], 6);
+
+                        // Simpan link Google Drive langsung ke database jika berhasil di-upload
+                        if (!empty($syncResult['drive_url'])) {
+                            $this->presensiModel->updateFotoMasukByUserTanggal(
+                                (int)$currentUser['id'],
+                                $today,
+                                $syncResult['drive_url']
+                            );
+                        }
                     } catch (\Throwable $e) {
                         // Abaikan error sync — presensi sudah tersimpan di DB
                         error_log('Google Sync Error (non-fatal): ' . $e->getMessage());
@@ -334,10 +347,15 @@ class PresensiController {
             );
 
             if ($sukses) {
-                // 3. SETELAH DB SUKSES: Sinkronisasi ke Google secara async (non-blocking)
+                // 3. SETELAH DB SUKSES: Sinkronisasi ke Google & Simpan Link Foto Google Drive ke Database
                 if (GoogleSyncHelper::isConfigured()) {
                     try {
-                        GoogleSyncHelper::syncAttendanceAsync([
+                        $namaBersih = preg_replace('/[^a-zA-Z0-9]/', '_', $currentUser['nama'] ?? 'Pegawai');
+                        $namaBersih = trim(preg_replace('/_+/', '_', $namaBersih), '_');
+                        $nikBersih  = preg_replace('/[^a-zA-Z0-9]/', '_', $currentUser['nik'] ?? $currentUser['id']);
+                        $driveFilename = 'pulang_' . $nikBersih . ($namaBersih ? '_' . $namaBersih : '') . '_' . date('Ymd_His');
+
+                        $syncResult = GoogleSyncHelper::syncAttendance([
                             'tipe'            => 'pulang',
                             'user_id'         => $currentUser['id'],
                             'nik'             => $currentUser['nik'] ?? '-',
@@ -353,8 +371,16 @@ class PresensiController {
                             'longitude'       => $long,
                             'jarak'           => $jarak,
                             'image_base64'    => $fotoBase64,
-                            'filename'        => 'pulang_' . ($currentUser['nik'] ?? $currentUser['id']) . '_' . date('Ymd_His')
-                        ]);
+                            'filename'        => $driveFilename
+                        ], 6);
+
+                        // Simpan link Google Drive langsung ke database jika berhasil di-upload
+                        if (!empty($syncResult['drive_url'])) {
+                            $this->presensiModel->updateFotoKeluarById(
+                                (int)$presensiHariIni['id'],
+                                $syncResult['drive_url']
+                            );
+                        }
                     } catch (\Throwable $e) {
                         error_log('Google Sync Error (non-fatal): ' . $e->getMessage());
                     }

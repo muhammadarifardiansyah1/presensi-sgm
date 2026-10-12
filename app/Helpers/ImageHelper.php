@@ -219,6 +219,15 @@ class ImageHelper {
             return $filePath;
         }
 
+        // Jika running di Vercel dan file fisik tidak ada (misal file sementara di /tmp yang sudah terhapus)
+        $isVercel = (getenv('VERCEL') || !empty($_SERVER['VERCEL']) || getenv('VERCEL_ENV'));
+        if ($isVercel) {
+            $physicalPath = __DIR__ . '/../../public/assets/images/uploads/' . trim($subfolder, '/') . '/' . ltrim($filePath, '/');
+            if (!file_exists($physicalPath)) {
+                return !empty($default) ? Config::baseUrl($default) : Config::baseUrl('assets/images/default-avatar.png');
+            }
+        }
+
         return Config::baseUrl('assets/images/uploads/' . trim($subfolder, '/') . '/' . ltrim($filePath, '/'));
     }
 

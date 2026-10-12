@@ -559,6 +559,7 @@ class NotificationHelper {
                     'badge_text'    => $isTerlambat ? 'Terlambat' : 'Tepat Waktu',
                     'badge_type'    => $isTerlambat ? 'danger' : 'success',
                     'foto_profil'   => $p['foto_profil'] ?? null,
+                    'foto_masuk'    => $p['foto_masuk'] ?? null,
                     'waktu_raw'     => $p['waktu_aktivitas'],
                     'waktu_display' => $jamDisplay,
                     'link'          => Config::baseUrl('laporan/harian')

@@ -1176,6 +1176,22 @@ class Presensi {
 
         return $rows;
     }
+
+    /**
+     * Update URL foto presensi masuk (misal setelah berhasil diunggah ke Google Drive)
+     */
+    public function updateFotoMasukByUserTanggal(int $userId, string $tanggal, string $fotoUrl): bool {
+        $stmt = $this->db->prepare("UPDATE `presensi` SET `foto_masuk` = ? WHERE `user_id` = ? AND `tanggal` = ?");
+        return $stmt->execute([$fotoUrl, $userId, $tanggal]);
+    }
+
+    /**
+     * Update URL foto presensi keluar (misal setelah berhasil diunggah ke Google Drive)
+     */
+    public function updateFotoKeluarById(int $presensiId, string $fotoUrl): bool {
+        $stmt = $this->db->prepare("UPDATE `presensi` SET `foto_keluar` = ? WHERE `id` = ?");
+        return $stmt->execute([$fotoUrl, $presensiId]);
+    }
 }
 
 

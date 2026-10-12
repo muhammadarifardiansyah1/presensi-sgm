@@ -259,17 +259,16 @@ $rateKepatuhan = ($jumlahHadir > 0) ? round(($tepatWaktu / $jumlahHadir) * 100) 
                                 // Card Tipe: Presensi Fisik Pegawai
                                 $fotoUrl = '';
                                 if (!empty($act['foto_profil'])) {
-                                    $fotoPath = __DIR__ . '/../../../assets/images/uploads/profil/' . basename($act['foto_profil']);
-                                    if (file_exists($fotoPath)) {
-                                        $fotoUrl = Config::baseUrl('assets/images/uploads/profil/' . basename($act['foto_profil']));
-                                    }
+                                    $fotoUrl = ImageHelper::getPhotoUrl($act['foto_profil'], 'profil');
+                                } elseif (!empty($act['foto_masuk'])) {
+                                    $fotoUrl = ImageHelper::getPhotoUrl($act['foto_masuk'], 'presensi');
                                 }
                                 $inisialPegawai = mb_strtoupper(mb_substr($act['judul'] ?? 'P', 0, 1));
                             ?>
                                 <div class="activity-feed-left">
                                     <div style="width: 42px; height: 42px; border-radius: 50%; overflow: hidden; background: var(--bg-surface); border: 2px solid var(--border-color); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 700; color: var(--accent-blue);">
-                                        <?php if ($fotoUrl): ?>
-                                            <img src="<?= $fotoUrl ?>" alt="" style="width: 100%; height: 100%; object-fit: cover;">
+                                        <?php if (!empty($fotoUrl)): ?>
+                                            <img src="<?= $fotoUrl ?>" alt="" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.remove(); this.parentElement.innerText='<?= $inisialPegawai ?>';">
                                         <?php else: ?>
                                             <?= $inisialPegawai ?>
                                         <?php endif; ?>

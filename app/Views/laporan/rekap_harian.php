@@ -211,10 +211,18 @@ $tanggalSelesaiSelected = $tanggalSelesai ?? $tanggalMulaiSelected;
                                 <?= htmlspecialchars($row['jam_masuk'] ?? '-') ?>
                             </td>
                             <td style="text-align: center;">
-                                <?php if (!empty($row['foto_masuk'])): ?>
-                                    <a href="<?= ImageHelper::getPhotoUrl($row['foto_masuk'], 'presensi') ?>" target="_blank" title="Lihat Foto Masuk">
-                                        <img src="<?= ImageHelper::getPhotoUrl($row['foto_masuk'], 'presensi') ?>" class="img-thumb-table" alt="Foto Masuk">
-                                    </a>
+                                <?php if (!empty($row['foto_masuk'])): 
+                                    $urlFotoMasuk = ImageHelper::getPhotoUrl($row['foto_masuk'], 'presensi');
+                                    $isDriveMasuk = (str_starts_with($row['foto_masuk'], 'http://') || str_starts_with($row['foto_masuk'], 'https://'));
+                                ?>
+                                    <div style="display:inline-flex; flex-direction:column; align-items:center; gap:2px;">
+                                        <a href="<?= $urlFotoMasuk ?>" target="_blank" title="Lihat Foto Masuk (Klik untuk perbesar)">
+                                            <img src="<?= $urlFotoMasuk ?>" class="img-thumb-table" alt="Foto Masuk" onerror="this.onerror=null; this.src='<?= Config::baseUrl('assets/images/default-avatar.png') ?>';">
+                                        </a>
+                                        <a href="<?= $urlFotoMasuk ?>" target="_blank" style="font-size:10px; color:var(--accent-blue); text-decoration:none; font-weight:600;">
+                                            <?= $isDriveMasuk ? 'Buka Drive' : 'Buka Foto' ?>
+                                        </a>
+                                    </div>
                                 <?php else: ?>
                                     <span style="color:var(--text-subtle);">-</span>
                                 <?php endif; ?>
@@ -223,10 +231,18 @@ $tanggalSelesaiSelected = $tanggalSelesai ?? $tanggalMulaiSelected;
                                 <?= htmlspecialchars($row['jam_pulang'] ?? '-') ?>
                             </td>
                             <td style="text-align: center;">
-                                <?php if (!empty($row['foto_keluar'])): ?>
-                                    <a href="<?= ImageHelper::getPhotoUrl($row['foto_keluar'], 'presensi') ?>" target="_blank" title="Lihat Foto Keluar">
-                                        <img src="<?= ImageHelper::getPhotoUrl($row['foto_keluar'], 'presensi') ?>" class="img-thumb-table" alt="Foto Keluar">
-                                    </a>
+                                <?php if (!empty($row['foto_keluar'])): 
+                                    $urlFotoKeluar = ImageHelper::getPhotoUrl($row['foto_keluar'], 'presensi');
+                                    $isDriveKeluar = (str_starts_with($row['foto_keluar'], 'http://') || str_starts_with($row['foto_keluar'], 'https://'));
+                                ?>
+                                    <div style="display:inline-flex; flex-direction:column; align-items:center; gap:2px;">
+                                        <a href="<?= $urlFotoKeluar ?>" target="_blank" title="Lihat Foto Keluar (Klik untuk perbesar)">
+                                            <img src="<?= $urlFotoKeluar ?>" class="img-thumb-table" alt="Foto Keluar" onerror="this.onerror=null; this.src='<?= Config::baseUrl('assets/images/default-avatar.png') ?>';">
+                                        </a>
+                                        <a href="<?= $urlFotoKeluar ?>" target="_blank" style="font-size:10px; color:var(--accent-blue); text-decoration:none; font-weight:600;">
+                                            <?= $isDriveKeluar ? 'Buka Drive' : 'Buka Foto' ?>
+                                        </a>
+                                    </div>
                                 <?php else: ?>
                                     <span style="color:var(--text-subtle);">-</span>
                                 <?php endif; ?>

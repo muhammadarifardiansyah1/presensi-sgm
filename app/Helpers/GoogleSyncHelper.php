@@ -36,7 +36,7 @@ class GoogleSyncHelper {
      * @param array $data Payload presensi
      * @return array ['success' => bool, 'drive_url' => ?string, 'message' => string]
      */
-    public static function syncAttendance(array $data): array {
+    public static function syncAttendance(array $data, int $timeoutSeconds = 6): array {
         if (!self::isConfigured()) {
             return [
                 'success' => false,
@@ -51,7 +51,7 @@ class GoogleSyncHelper {
             'timestamp' => date('Y-m-d H:i:s')
         ], $data);
 
-        return self::sendPostRequest($url, $payload, 5);
+        return self::sendPostRequest($url, $payload, $timeoutSeconds);
     }
 
     /**

@@ -77,7 +77,7 @@
                     <td class="text-center"><?= htmlspecialchars($row['jam_masuk'] ?? '-') ?></td>
                     <td class="text-center">
                         <?php if (!empty($row['foto_masuk'])): ?>
-                            <a href="<?= Config::baseUrl('assets/images/uploads/presensi/' . $row['foto_masuk']) ?>" target="_blank" style="color: #2563eb; text-decoration: underline;">Lihat Foto</a>
+                            <a href="<?= ImageHelper::getPhotoUrl($row['foto_masuk'], 'presensi') ?>" target="_blank" style="color: #2563eb; text-decoration: underline;">Lihat Foto</a>
                         <?php else: ?>
                             -
                         <?php endif; ?>
@@ -86,7 +86,7 @@
                     <td class="text-center"><?= htmlspecialchars($row['jam_pulang'] ?? '-') ?></td>
                     <td class="text-center">
                         <?php if (!empty($row['foto_keluar'])): ?>
-                            <a href="<?= Config::baseUrl('assets/images/uploads/presensi/' . $row['foto_keluar']) ?>" target="_blank" style="color: #2563eb; text-decoration: underline;">Lihat Foto</a>
+                            <a href="<?= ImageHelper::getPhotoUrl($row['foto_keluar'], 'presensi') ?>" target="_blank" style="color: #2563eb; text-decoration: underline;">Lihat Foto</a>
                         <?php else: ?>
                             -
                         <?php endif; ?>
