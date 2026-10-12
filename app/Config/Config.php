@@ -78,8 +78,11 @@ class Config {
         $protocol = $isHttps ? "https://" : "http://";
         $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
         
-        // Find subfolder
+        // Find subfolder (abaikan folder internal /api pada Vercel Serverless)
         $scriptName = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? ''));
+        if ($scriptName === '/api') {
+            $scriptName = '';
+        }
         $base = rtrim($protocol . $host . $scriptName, '/');
         
         return $base . ($path ? '/' . ltrim($path, '/') : '');
